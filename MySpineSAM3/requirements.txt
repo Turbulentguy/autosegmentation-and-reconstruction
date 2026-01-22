@@ -1,0 +1,35 @@
+# MySpineSAM3 Dependencies
+# Core Deep Learning
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Medical Imaging
+monai>=1.3.0
+nibabel>=5.0.0
+medpy>=0.5.0
+pydicom>=2.4.0
+SimpleITK>=2.3.0
+
+# HuggingFace (for CTSpine1K dataset)
+datasets>=2.14.0
+huggingface_hub>=0.17.0
+
+# Data Processing
+numpy>=1.24.0
+scipy>=1.11.0
+scikit-image>=0.21.0
+
+# Configuration & Utilities
+pyyaml>=6.0
+tqdm>=4.65.0
+
+# Visualization & Logging
+tensorboard>=2.14.0
+tensorboardX>=2.6.0
+matplotlib>=3.7.0
+
+# SAM Models (install as needed)
+# Mobile SAM (lightweight, recommended):
+# pip install git+https://github.com/ChaoningZhang/MobileSAM.git
+# Full SAM:
+# pip install git+https://github.com/facebookresearch/segment-anything.git
