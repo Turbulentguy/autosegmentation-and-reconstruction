@@ -30,8 +30,12 @@ def parse_data_split(split_file: Path) -> Dict[str, List[str]]:
         test_public:
         file3.nii.gz
         ...
+        
+        test_private:
+        file4.nii.gz
+        ...
     """
-    splits = {"trainset": [], "test_public": []}
+    splits = {"trainset": [], "test_public": [], "test_private": []}
     current_split = None
     
     if not split_file.exists():
@@ -52,7 +56,7 @@ def parse_data_split(split_file: Path) -> Dict[str, List[str]]:
                 base_name = line.replace(".nii.gz", "")
                 splits[current_split].append(base_name)
     
-    logger.info(f"Parsed splits: trainset={len(splits['trainset'])}, test_public={len(splits['test_public'])}")
+    logger.info(f"Parsed splits: trainset={len(splits['trainset'])}, test_public={len(splits['test_public'])}, test_private={len(splits['test_private'])}")
     return splits
 
 
@@ -87,7 +91,7 @@ class LocalNiftiDataset(Dataset):
         all_pairs = self._find_all_pairs()
         self.pairs = self._apply_split(all_pairs, split, train_ratio, val_ratio)
         
-        logger.info(f"LocalNiftiDataset: {len(self.pairs)} {split} pairs, spatial_size={spatial_size}")
+        logger.info(f"LocalNiftiDataset: {len(self.pairs)} {split} pairs, spatial_size={spatial_size}, binary_mask={binary_mask}")
     
     def _find_all_pairs(self) -> Dict[str, Tuple[Path, Path]]:
         """Find all matching image and segmentation pairs recursively."""
@@ -120,19 +124,20 @@ class LocalNiftiDataset(Dataset):
         train_ratio: float,
         val_ratio: float,
     ) -> List[Tuple[Path, Path]]:
-        """Apply official CTSpine1K splits with random shuffling.
+        """Apply official CTSpine1K splits.
         
-        Uses trainset from data_split.txt and splits it into:
-        - Train: train_ratio (default 80%)
-        - Validation: val_ratio (default 10%)
-        - Test: remaining (default 10%)
-        
-        All splits are shuffled but with fixed seed for reproducibility.
+        Uses the official data_split.txt which defines:
+        - trainset: 610 samples → training
+        - test_public: 197 samples → validation
+        - test_private: 198 samples → testing
+        Total: 1,005 samples
         """
-        # Try to load official splits
-        split_file = self.data_dir / "metadata" / "data_split.txt"
+        # Try to load official splits from local data/metadata first
+        split_file = Path(__file__).parent.parent / "data" / "metadata" / "data_split.txt"
         if not split_file.exists():
-            # Try alternate locations
+            # Try HuggingFace cache location
+            split_file = self.data_dir / "metadata" / "data_split.txt"
+        if not split_file.exists():
             for parent in [self.data_dir.parent, self.data_dir]:
                 alt_path = parent / "data" / "metadata" / "data_split.txt"
                 if alt_path.exists():
@@ -141,35 +146,41 @@ class LocalNiftiDataset(Dataset):
         
         official_splits = parse_data_split(split_file)
         
-        # Get available pairs that match official trainset
-        available_pairs = []
-        missing_count = 0
-        for name in official_splits.get("trainset", []):
-            if name in all_pairs:
-                available_pairs.append(all_pairs[name])
-            else:
-                missing_count += 1
-                
-        if missing_count > 0:
-            logger.warning(f"Missing {missing_count} files from official trainset (found {len(available_pairs)})")
+        # Collect pairs for each official split
+        def collect_pairs(split_name):
+            pairs = []
+            missing = 0
+            for name in official_splits.get(split_name, []):
+                if name in all_pairs:
+                    pairs.append(all_pairs[name])
+                else:
+                    missing += 1
+            if missing > 0:
+                logger.warning(f"Missing {missing} files from {split_name}")
+            return pairs
         
-        # If no official splits available, fall back to all pairs
-        if not available_pairs:
-            logger.warning("No official splits found, using all pairs")
-            available_pairs = list(all_pairs.values())
+        train_pairs = collect_pairs("trainset")      # 610 samples
+        val_pairs = collect_pairs("test_public")     # 197 samples  
+        test_pairs = collect_pairs("test_private")   # 198 samples
         
-        # Random shuffle with seed for reproducibility
+        # Fallback if no official splits
+        if not train_pairs and not val_pairs and not test_pairs:
+            logger.warning("No official splits found, using ratio-based split")
+            all_list = list(all_pairs.values())
+            rng = random.Random(self.seed)
+            rng.shuffle(all_list)
+            n = len(all_list)
+            n_train = int(n * train_ratio)
+            n_val = int(n * val_ratio)
+            train_pairs = all_list[:n_train]
+            val_pairs = all_list[n_train:n_train + n_val]
+            test_pairs = all_list[n_train + n_val:]
+        
+        # Shuffle with seed for reproducibility
         rng = random.Random(self.seed)
-        rng.shuffle(available_pairs)
-        
-        # Split into train/val/test (80/10/10)
-        n_total = len(available_pairs)
-        n_train = int(n_total * train_ratio)
-        n_val = int(n_total * val_ratio)
-        
-        train_pairs = available_pairs[:n_train]
-        val_pairs = available_pairs[n_train:n_train + n_val]
-        test_pairs = available_pairs[n_train + n_val:]
+        rng.shuffle(train_pairs)
+        rng.shuffle(val_pairs)
+        rng.shuffle(test_pairs)
         
         if split == "train":
             pairs = train_pairs
@@ -178,14 +189,17 @@ class LocalNiftiDataset(Dataset):
         else:  # test
             pairs = test_pairs
         
-        logger.info(f"Split '{split}': {len(pairs)} samples (total={n_total}, train={len(train_pairs)}, val={len(val_pairs)}, test={len(test_pairs)})")
+        logger.info(f"Split '{split}': {len(pairs)} samples (train={len(train_pairs)}, val={len(val_pairs)}, test={len(test_pairs)})")
         return pairs
     
     def __len__(self):
         return len(self.pairs)
     
     def _random_crop(self, image: np.ndarray, label: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Random spatial crop to spatial_size.
+        """Random spatial crop to spatial_size with foreground-biased sampling.
+        
+        For training: 50% of crops center on a foreground (vertebra) voxel.
+        This ensures the model sees vertebrae during training instead of mostly background.
         
         Args:
             image: (C, H, W, D) array
@@ -207,11 +221,33 @@ class LocalNiftiDataset(Dataset):
             label = np.pad(label, ((0, 0), (0, pad_h), (0, pad_w), (0, pad_d)), mode='constant')
             h, w, d = image.shape[1:]
         
-        # Random crop
         if self.is_train:
-            x = random.randint(0, max(0, h - th))
-            y = random.randint(0, max(0, w - tw))
-            z = random.randint(0, max(0, d - td))
+            # 50% foreground-biased sampling for training
+            use_foreground_center = random.random() < 0.5
+            
+            if use_foreground_center:
+                # Find foreground voxels (any vertebra class > 0)
+                fg_coords = np.argwhere(label[0] > 0)
+                
+                if len(fg_coords) > 0:
+                    # Pick a random foreground voxel as center
+                    center_idx = random.randint(0, len(fg_coords) - 1)
+                    cy, cx, cz = fg_coords[center_idx]
+                    
+                    # Calculate crop start to center on this voxel
+                    x = max(0, min(h - th, cy - th // 2))
+                    y = max(0, min(w - tw, cx - tw // 2))
+                    z = max(0, min(d - td, cz - td // 2))
+                else:
+                    # No foreground found, fall back to random
+                    x = random.randint(0, max(0, h - th))
+                    y = random.randint(0, max(0, w - tw))
+                    z = random.randint(0, max(0, d - td))
+            else:
+                # Random crop (could be background or foreground)
+                x = random.randint(0, max(0, h - th))
+                y = random.randint(0, max(0, w - tw))
+                z = random.randint(0, max(0, d - td))
         else:
             # Center crop for val/test
             x = max(0, (h - th) // 2)
@@ -269,10 +305,13 @@ def get_local_dataloaders(config, train_transform=None, val_transform=None):
     kwargs = dict(
         hu_min=data_cfg.get("hu_min", -100),
         hu_max=data_cfg.get("hu_max", 1000),
-        binary_mask=data_cfg.get("ctspine1k", {}).get("binary_mask", True),
-        train_ratio=data_cfg.get("train_ratio", 0.8),
-        val_ratio=data_cfg.get("val_ratio", 0.1),
-        seed=config.get("seed", 42),
+        # CRITICAL: Default False for multi-class segmentation!
+        # Check both possible config paths for binary_mask
+        binary_mask=data_cfg.get("ctspine1k", {}).get("binary_mask", 
+                    data_cfg.get("binary_mask", False)),
+        train_ratio=data_cfg.get("split", {}).get("train", 0.8),
+        val_ratio=data_cfg.get("split", {}).get("val", 0.15),
+        seed=config.get("project", {}).get("seed", 42),
         spatial_size=tuple(data_cfg.get("spatial_size", [96, 96, 96])),
     )
     

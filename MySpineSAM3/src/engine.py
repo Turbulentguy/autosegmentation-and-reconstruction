@@ -20,7 +20,7 @@ from tqdm import tqdm
 from torchvision.utils import make_grid
 
 from torch.utils.tensorboard import SummaryWriter
-from monai.losses import DiceCELoss
+from monai.losses import DiceCELoss, HausdorffDTLoss
 
 from src.metrics import MetricCalculator, InferenceTimer
 
@@ -64,7 +64,7 @@ class Trainer:
         # Initialize CSV with header (overwrites existing)
         with open(self.csv_path, mode="w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["Epoch", "Train_Loss", "Val_Loss", "DSC", "IoU", "HD95", "ASD", "InferenceTime_ms"])
+            writer.writerow(["Epoch", "Train_Loss", "Val_Loss", "Val_DSC", "Val_IoU", "HD95", "ASD", "InferenceTime_ms"])
         logger.info(f"CSV metrics logging to: {self.csv_path}")
         
         # Optimizer
@@ -77,12 +77,29 @@ class Trainer:
         # Scheduler
         self.scheduler = CosineAnnealingLR(self.optimizer, T_max=self.num_epochs)
         
-        # Loss
-        self.criterion = DiceCELoss(
+        # Loss Configuration
+        loss_cfg = train_cfg.get("loss", {})
+        
+        # 1. DiceCELoss (Volume Overlap)
+        self.criterion_dice = DiceCELoss(
             include_background=False,
             to_onehot_y=True,
             softmax=True,
+            lambda_dice=loss_cfg.get("lambda_dice", 1.0),
+            lambda_ce=loss_cfg.get("lambda_ce", 1.0),
         )
+        
+        # 2. HausdorffDTLoss (Boundary Accuracy)
+        self.lambda_hd = loss_cfg.get("lambda_hausdorff", 0.0)
+        if self.lambda_hd > 0:
+            logger.info(f"Using HausdorffDTLoss with lambda={self.lambda_hd}")
+            self.criterion_hd = HausdorffDTLoss(
+                include_background=False,
+                to_onehot_y=True,
+                softmax=True, # Use softmax for multi-class
+            )
+        else:
+            self.criterion_hd = None
         
         # Early stopping
         es_cfg = train_cfg.get("early_stopping", {})
@@ -105,7 +122,22 @@ class Trainer:
             
             self.optimizer.zero_grad()
             outputs = self.model(images)
-            loss = self.criterion(outputs, labels)
+            
+            # Combined Loss Calculation
+            loss_dice = self.criterion_dice(outputs, labels)
+            
+            if self.criterion_hd is not None:
+                # Need softmax probabilities for HD loss
+                if isinstance(outputs, list): # For deep supervision
+                    out_for_hd = torch.softmax(outputs[0], dim=1)
+                else:
+                    out_for_hd = torch.softmax(outputs, dim=1)
+                    
+                loss_hd = self.criterion_hd(out_for_hd, labels)
+                loss = loss_dice + (self.lambda_hd * loss_hd)
+            else:
+                loss = loss_dice
+                
             loss.backward()
             self.optimizer.step()
             
@@ -134,7 +166,21 @@ class Trainer:
             with InferenceTimer() as timer:
                 outputs = self.model(images)
             
-            loss = self.criterion(outputs, labels)
+            # Combined Loss Calculation
+            loss_dice = self.criterion_dice(outputs, labels)
+            
+            if self.criterion_hd is not None:
+                # Need softmax probabilities for HD loss
+                if isinstance(outputs, list):
+                    out_for_hd = torch.softmax(outputs[0], dim=1)
+                else:
+                    out_for_hd = torch.softmax(outputs, dim=1)
+                
+                loss_hd = self.criterion_hd(out_for_hd, labels)
+                loss = loss_dice + (self.lambda_hd * loss_hd)
+            else:
+                loss = loss_dice
+                
             val_loss += loss.item()
             
             # Post-processing for metrics
@@ -215,6 +261,10 @@ class Trainer:
                 self.writer.add_scalar("Metric/HD95", hd95, epoch)
                 
                 # CSV Logging
+                # Handle NaN values for HD95/ASD
+                hd95_str = f"{hd95:.4f}" if not np.isnan(hd95) else "NaN"
+                asd_str = f"{asd:.4f}" if not np.isnan(asd) else "NaN"
+                
                 with open(self.csv_path, mode="a", newline="") as f:
                     writer = csv.writer(f)
                     writer.writerow([
@@ -223,8 +273,8 @@ class Trainer:
                         f"{val_loss:.4f}", 
                         f"{dsc:.4f}", 
                         f"{iou:.4f}", 
-                        f"{hd95:.4f}", 
-                        f"{asd:.4f}", 
+                        hd95_str, 
+                        asd_str, 
                         f"{inf_time:.2f}"
                     ])
                 

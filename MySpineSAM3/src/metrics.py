@@ -70,27 +70,76 @@ class MetricCalculator:
     
     def compute(self, pred: np.ndarray, target: np.ndarray, 
                 voxel_spacing: tuple = (1,1,1), inference_time_ms: float = 0) -> Dict[str, float]:
-        """Compute all metrics for a single prediction."""
+        """Compute all metrics for a single prediction.
+        
+        Only computes metrics for classes that actually exist in the ground truth,
+        which avoids inflated scores from empty classes.
+        """
         result = {}
         start_class = 0 if self.include_background else 1
         
+        # Ensure integer types for class comparison (fixes float mask interpolation)
+        pred = pred.astype(np.int32)
+        target = target.astype(np.int32)
+        
+        # Find classes that actually exist in ground truth
+        existing_classes = [c for c in range(start_class, self.num_classes) if np.any(target == c)]
+        
+        # Debug: log class info on first call
+        if len(self.results) == 0:
+            unique_target = np.unique(target)
+            unique_pred = np.unique(pred)
+            logger.info(f"[MetricCalculator] Target unique classes: {unique_target.tolist()}")
+            logger.info(f"[MetricCalculator] Pred unique classes: {unique_pred.tolist()}")
+            logger.info(f"[MetricCalculator] existing_classes (excluding bg): {existing_classes}")
+        
+        if not existing_classes:
+            # No valid classes found
+            for metric in self.metrics:
+                if metric == "InferenceTime":
+                    result["InferenceTime"] = inference_time_ms
+                else:
+                    result[metric] = 0.0
+            self.results.append(result)
+            return result
+        
         for metric in self.metrics:
             if metric == "DSC":
-                scores = [dice_coefficient((pred==c).astype(float), (target==c).astype(float)) 
-                         for c in range(start_class, self.num_classes)]
-                result["DSC"] = np.mean(scores)
+                scores = []
+                for c in existing_classes:
+                    pred_c = (pred == c).astype(float)
+                    target_c = (target == c).astype(float)
+                    score = dice_coefficient(pred_c, target_c)
+                    scores.append(score)
+                result["DSC"] = np.mean(scores) if scores else 0.0
             elif metric == "IOU":
-                scores = [iou_score((pred==c).astype(float), (target==c).astype(float))
-                         for c in range(start_class, self.num_classes)]
-                result["IOU"] = np.mean(scores)
+                scores = []
+                for c in existing_classes:
+                    pred_c = (pred == c).astype(float)
+                    target_c = (target == c).astype(float)
+                    score = iou_score(pred_c, target_c)
+                    scores.append(score)
+                result["IOU"] = np.mean(scores) if scores else 0.0
             elif metric == "HD95":
-                scores = [hausdorff_distance_95((pred==c).astype(int), (target==c).astype(int), voxel_spacing)
-                         for c in range(start_class, self.num_classes)]
-                result["HD95"] = np.mean([s for s in scores if s != float('inf')] or [0])
+                scores = []
+                for c in existing_classes:
+                    pred_c = (pred == c).astype(int)
+                    target_c = (target == c).astype(int)
+                    # Only compute if both pred and target have this class
+                    if np.any(pred_c) and np.any(target_c):
+                        scores.append(hausdorff_distance_95(pred_c, target_c, voxel_spacing))
+                valid_scores = [s for s in scores if s != float('inf') and not np.isnan(s)]
+                result["HD95"] = np.mean(valid_scores) if valid_scores else float('nan')
             elif metric == "ASD":
-                scores = [average_surface_distance((pred==c).astype(int), (target==c).astype(int), voxel_spacing)
-                         for c in range(start_class, self.num_classes)]
-                result["ASD"] = np.mean([s for s in scores if s != float('inf')] or [0])
+                scores = []
+                for c in existing_classes:
+                    pred_c = (pred == c).astype(int)
+                    target_c = (target == c).astype(int)
+                    # Only compute if both pred and target have this class
+                    if np.any(pred_c) and np.any(target_c):
+                        scores.append(average_surface_distance(pred_c, target_c, voxel_spacing))
+                valid_scores = [s for s in scores if s != float('inf') and not np.isnan(s)]
+                result["ASD"] = np.mean(valid_scores) if valid_scores else float('nan')
             elif metric == "InferenceTime":
                 result["InferenceTime"] = inference_time_ms
         

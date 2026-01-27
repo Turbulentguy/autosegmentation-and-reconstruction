@@ -17,30 +17,30 @@ data:
   # Dataset source: "local" for processed NIfTI, "ctspine1k" for HuggingFace, "local_nifti" for raw NIfTI
   # Switch to local_nifti to bypass HuggingFace offline issues - we will scan files directly
   source: "local_nifti"
-  
+
   # Local paths for raw NIfTI (used when source: "local_nifti")
   # Pointing to the HF cache directory to scan for .nii.gz files recursively
   local_data_dir: "/lustrefs/disk/project/lt200431-ddmmss/wat/datasets--alexanderdann--CTSpine1K/snapshots/9b454add169b94f2c322ad6f08b66823975e8dbd"
-  
+
   # Local NIfTI paths (used when source: "local")
   root_dir: "./data/processed_nifti"
   raw_dicom_dir: "./data/raw_dicom"
-  
+
   # CTSpine1K HuggingFace settings (used when source: "ctspine1k")
   ctspine1k:
-    mode: "3d"                    # "3d" for volumetric, "2d" for slices
+    mode: "3d" # "3d" for volumetric, "2d" for slices
     # Point to the PARENT directory containing "datasets--alexanderdann--CTSpine1K"
     cache_dir: "/lustrefs/disk/project/lt200431-ddmmss/wat"
-    writer_batch_size: 5          # Lower = less RAM during Arrow conversion
-    binary_mask: false            # Convert vertebrae labels to binary spine mask
-  
+    writer_batch_size: 5 # Lower = less RAM during Arrow conversion
+    binary_mask: false # Convert vertebrae labels to binary spine mask
+
   # Hounsfield Unit windowing for bone/spine visualization
-  hu_min: -100      # Lower bound (soft tissue cutoff)
-  hu_max: 1000      # Upper bound (bone saturation)
-  
+  hu_min: -100 # Lower bound (soft tissue cutoff)
+  hu_max: 1000 # Upper bound (bone saturation)
+
   # 3D patch size for model input
   spatial_size: [96, 96, 96]
-  
+
   # Data split ratios
   split:
     train: 0.7
@@ -53,75 +53,75 @@ data:
 model:
   # Options: UNET, UNETR, SwinUNETR, SegmentAnyBone, MobileSAM, SAM2D, SAM3
   architecture: "SwinUNETR"
-  
-  in_channels: 1      # Single channel CT
-  out_channels: 32    # 0=Background, 1-25=Vertebrae (Safe upper limit)
-  
+
+  in_channels: 1 # Single channel CT
+  out_channels: 26 # 0=Background, 1-25=Vertebrae (C1-C7, T1-T12, L1-L5, S1)
+
   # Path to pretrained weights (relative to project root)
   pretrained_path: "./checkpoints/pretrained_weights/swin_unetr.pth"
-  use_pretrained: false  # Set to true if pretrained weights exist
-  
+  use_pretrained: false # Set to true if pretrained weights exist
+
   # Model-specific parameters
   unet:
     features: [32, 64, 128, 256, 512]
     dropout: 0.1
-    
+
   unetr:
     img_size: [96, 96, 96]
     feature_size: 16
     hidden_size: 768
     mlp_dim: 3072
     num_heads: 12
-    
+
   swin_unetr:
     img_size: [96, 96, 96]
     feature_size: 48
     depths: [2, 2, 2, 2]
     num_heads: [3, 6, 12, 24]
-    
+
   # SegmentAnyBone configuration (2D slice-based bone segmentation)
   # Reference: https://github.com/mazurowski-lab/SegmentAnyBone
   segment_any_bone:
     # Pretrained weights from SegmentAnyBone project
     checkpoint_path: "./checkpoints/pretrained_weights/bone_sam.pth"
     attention_weights: "./checkpoints/pretrained_weights/atten.pth"
-    
+
     # Uses Mobile SAM (vit_t) as base model
     use_mobile_sam: true
-    image_size: 1024              # SAM input resolution
-    output_size: 256              # Mask output resolution
-    
+    image_size: 1024 # SAM input resolution
+    output_size: 256 # Mask output resolution
+
     # Adapter-based fine-tuning (efficient, only trains ~1% of params)
     use_adapter: true
-    adapter_dim: 64               # Bottleneck dimension for adapters
-    decoder_adapt_depth: 2        # Depth of decoder adapter layers
-    
+    adapter_dim: 64 # Bottleneck dimension for adapters
+    decoder_adapt_depth: 2 # Depth of decoder adapter layers
+
     # Freezing strategy (recommended for fine-tuning)
-    freeze_encoder: true          # Freeze image encoder (ViT backbone)
-    freeze_prompt_encoder: true   # Freeze prompt encoder
-    
+    freeze_encoder: true # Freeze image encoder (ViT backbone)
+    freeze_prompt_encoder: true # Freeze prompt encoder
+
     # Training hyperparameters (from SegmentAnyBone paper)
-    learning_rate: 5.0e-4         # Recommended for SAM fine-tuning
-    warmup_enabled: true          # Use learning rate warmup
-    warmup_period: 200            # Warmup iterations
-    
+    learning_rate: 5.0e-4 # Recommended for SAM fine-tuning
+    warmup_enabled: true # Use learning rate warmup
+    warmup_period: 200 # Warmup iterations
+
   segment_any_model3:
     encoder_type: "vit_b"
     checkpoint_path: "./checkpoints/pretrained_weights/sam3.pth"
-  
+
   # Shared SAM settings (used by MobileSAM, SAM2D architectures)
   sam:
-    use_mobile_sam: true                # Use Mobile SAM (vit_t) vs full SAM
-    image_size: 1024                    # SAM input size
-    output_size: 256                    # Mask output size
+    use_mobile_sam: true # Use Mobile SAM (vit_t) vs full SAM
+    image_size: 1024 # SAM input size
+    output_size: 256 # Mask output size
     checkpoint_path: "./checkpoints/pretrained_weights/mobile_sam.pt"
-    use_adapter: true                   # Fine-tune with adapter layers
-    adapter_dim: 64                     # Adapter bottleneck dimension
-    freeze_encoder: true                # Freeze image encoder
-    freeze_prompt_encoder: true         # Freeze prompt encoder
-  
+    use_adapter: true # Fine-tune with adapter layers
+    adapter_dim: 64 # Adapter bottleneck dimension
+    freeze_encoder: true # Freeze image encoder
+    freeze_prompt_encoder: true # Freeze prompt encoder
+
   # Training mode: "3d" for volumetric, "2d" for slice-based SAM training
-  training_mode: "3d"                   # Set to "2d" for SAM/SegmentAnyBone
+  training_mode: "3d" # Set to "2d" for SAM/SegmentAnyBone
 
 # =============================================================================
 # Training Configuration
@@ -131,28 +131,28 @@ training:
   learning_rate: 1.0e-4
   weight_decay: 1.0e-4
   num_epochs: 90
-  
+
   # Validation frequency
-  val_interval: 2      # Validate every N epochs
+  val_interval: 2 # Validate every N epochs
   tensorboard_dir: "./logs/tensorboard"
-  
+
   # Early stopping
   early_stopping:
     enabled: true
-    patience: 15       # Stop if no improvement for N validations
-    min_delta: 0.001   # Minimum improvement threshold
-  
+    patience: 15 # Stop if no improvement for N validations
+    min_delta: 0.001 # Minimum improvement threshold
+
   # Optimizer settings
   optimizer:
     type: "AdamW"
     betas: [0.9, 0.999]
-    
+
   # Learning rate scheduler
   scheduler:
     type: "CosineAnnealingLR"
     T_max: 100
     eta_min: 1.0e-7
-  
+
   # Loss function
   loss:
     type: "DiceCELoss"
@@ -160,28 +160,31 @@ training:
     softmax: true
     lambda_dice: 1.0
     lambda_ce: 1.0
-    
+    # Hausdorff Loss settings
+    lambda_hausdorff: 0.5
+    hausdorff_alpha: 2.0
+
   # Augmentation settings
   augmentation:
     use_noise: true
     noise_prob: 0.5
     noise_std: 0.1
-    
+
     use_rotation: true
-    rotation_range: [-15, 15]  # degrees
+    rotation_range: [-15, 15] # degrees
     rotation_prob: 0.3
-    
+
     use_zoom: true
     zoom_range: [0.9, 1.1]
     zoom_prob: 0.3
-    
+
     use_flip: true
     flip_prob: 0.5
-    
+
     use_intensity_shift: true
     intensity_shift_range: [-0.1, 0.1]
     intensity_prob: 0.3
-  
+
   # Warmup settings (for SAM training)
   warmup:
     enabled: true
@@ -192,17 +195,17 @@ training:
 # =============================================================================
 evaluation:
   # Metrics to compute during testing
-  metrics: 
-    - "DSC"            # Dice Similarity Coefficient
-    - "IOU"            # Intersection over Union
-    - "HD95"           # 95% Hausdorff Distance
-    - "ASD"            # Average Surface Distance
-    - "InferenceTime"  # Time per volume in ms
-    
+  metrics:
+    - "DSC" # Dice Similarity Coefficient
+    - "IOU" # Intersection over Union
+    - "HD95" # 95% Hausdorff Distance
+    - "ASD" # Average Surface Distance
+    - "InferenceTime" # Time per volume in ms
+
   # Post-processing
   post_processing:
     use_argmax: true
-    apply_largest_component: true  # Keep only largest connected component
+    apply_largest_component: true # Keep only largest connected component
 
 # =============================================================================
 # Logging & Checkpoints
@@ -212,14 +215,14 @@ logging:
   tensorboard:
     enabled: true
     log_images: true
-    image_log_interval: 5   # Log images every N epochs
-    
+    image_log_interval: 5 # Log images every N epochs
+
   # Console output
-  print_interval: 10        # Print every N batches
+  print_interval: 10 # Print every N batches
 
 checkpoints:
   save_dir: "./checkpoints"
-  save_best: true           # Save when val loss improves
-  save_last: true           # Save after every epoch
+  save_best: true # Save when val loss improves
+  save_last: true # Save after every epoch
   best_model_name: "best_model.pth"
   last_model_name: "last_checkpoint.pth"
