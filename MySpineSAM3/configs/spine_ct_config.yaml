@@ -132,6 +132,10 @@ training:
   weight_decay: 1.0e-4
   num_epochs: 90
 
+  # Data Loading Optimization
+  num_workers: 8 # Increase for network storage (try 8-12)
+  pin_memory: true
+
   # Validation frequency
   val_interval: 2 # Validate every N epochs
   tensorboard_dir: "./logs/tensorboard"
@@ -150,7 +154,7 @@ training:
   # Learning rate scheduler
   scheduler:
     type: "CosineAnnealingLR"
-    T_max: 100
+    T_max: 90
     eta_min: 1.0e-7
 
   # Loss function

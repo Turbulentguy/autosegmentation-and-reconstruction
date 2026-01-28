@@ -49,7 +49,9 @@ class Trainer:
         # Training config
         train_cfg = config["training"]
         self.num_epochs = train_cfg.get("num_epochs", 100)
+        self.num_epochs = train_cfg.get("num_epochs", 100)
         self.val_interval = train_cfg.get("val_interval", 2)
+        self.hd95_interval = train_cfg.get("hd95_interval", 5)
         
         # TensorBoard
         tb_dir = train_cfg.get("tensorboard_dir", "./logs/tensorboard")
@@ -152,7 +154,14 @@ class Trainer:
         val_loss = 0.0
         
         # Initialize calculator with 3D metrics + InferenceTime
-        metrics = ["DSC", "IOU", "HD95", "ASD", "InferenceTime"]
+        # Initialize calculator with 3D metrics + InferenceTime
+        metrics = ["DSC", "IOU", "InferenceTime"]
+        
+        # Check if we should compute expensive metrics this epoch
+        should_compute_hd95 = (epoch + 1) % self.hd95_interval == 0
+        if should_compute_hd95:
+            metrics.extend(["HD95", "ASD"])
+            
         num_classes = self.config["model"]["out_channels"]
         calculator = MetricCalculator(metrics=metrics, 
                                       include_background=False, 
@@ -248,22 +257,35 @@ class Trainer:
                 # Extract specific metrics
                 dsc = avg_metrics.get("DSC", 0.0)
                 iou = avg_metrics.get("IOU", 0.0)
-                hd95 = avg_metrics.get("HD95", 0.0)
-                asd = avg_metrics.get("ASD", 0.0)
+                
+                # HD95/ASD might be missing if skipped
+                hd95 = avg_metrics.get("HD95", None)
+                asd = avg_metrics.get("ASD", None)
                 inf_time = avg_metrics.get("InferenceTime", 0.0)
                 
-                logger.info(f"Epoch {epoch+1} - Train: {train_loss:.4f}, Val: {val_loss:.4f}, DSC: {dsc:.4f}")
+                log_msg = f"Epoch {epoch+1} - Train: {train_loss:.4f}, Val: {val_loss:.4f}, DSC: {dsc:.4f}"
+                if hd95 is not None:
+                     log_msg += f", HD95: {hd95:.4f}"
+                logger.info(log_msg)
                 
                 # TensorBoard validation metrics
                 self.writer.add_scalar("Loss/val", val_loss, epoch)
                 self.writer.add_scalar("Metric/DSC", dsc, epoch)
                 self.writer.add_scalar("Metric/IOU", iou, epoch)
-                self.writer.add_scalar("Metric/HD95", hd95, epoch)
+                if hd95 is not None:
+                    self.writer.add_scalar("Metric/HD95", hd95, epoch)
                 
                 # CSV Logging
-                # Handle NaN values for HD95/ASD
-                hd95_str = f"{hd95:.4f}" if not np.isnan(hd95) else "NaN"
-                asd_str = f"{asd:.4f}" if not np.isnan(asd) else "NaN"
+                # Handle NaN/None values for HD95/ASD
+                if hd95 is not None:
+                    hd95_str = f"{hd95:.4f}" if not np.isnan(hd95) else "NaN"
+                else:
+                    hd95_str = "NaN"
+                    
+                if asd is not None:
+                    asd_str = f"{asd:.4f}" if not np.isnan(asd) else "NaN"
+                else:
+                    asd_str = "NaN"
                 
                 with open(self.csv_path, mode="a", newline="") as f:
                     writer = csv.writer(f)

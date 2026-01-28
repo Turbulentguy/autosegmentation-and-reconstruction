@@ -320,8 +320,17 @@ def get_local_dataloaders(config, train_transform=None, val_transform=None):
     test_ds = LocalNiftiDataset(data_dir, "test", val_transform, **kwargs)
     
     batch = config["training"]["batch_size"]
+    num_workers = config["training"].get("num_workers", 4)
+    pin_memory = config["training"].get("pin_memory", True)
+    
+    # Use persistent_workers if num_workers > 0 to avoid worker respawn overhead
+    persistent_workers = (num_workers > 0)
+    
     return (
-        DataLoader(train_ds, batch, shuffle=True, num_workers=4, drop_last=True),
-        DataLoader(val_ds, 1, shuffle=False, num_workers=2),
-        DataLoader(test_ds, 1, shuffle=False, num_workers=2),
+        DataLoader(train_ds, batch, shuffle=True, num_workers=num_workers, drop_last=True, 
+                   pin_memory=pin_memory, persistent_workers=persistent_workers),
+        DataLoader(val_ds, 1, shuffle=False, num_workers=2, 
+                   pin_memory=pin_memory, persistent_workers=False), # Validation often shorter
+        DataLoader(test_ds, 1, shuffle=False, num_workers=2, 
+                   pin_memory=pin_memory, persistent_workers=False),
     )

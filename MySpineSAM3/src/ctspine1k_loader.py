@@ -126,6 +126,13 @@ def get_ctspine1k_dataloaders(config, train_transform=None, val_transform=None, 
     test_ds = CTSpine1KDataset(hf["test"], val_transform, is_train=False, **kwargs)
     
     batch = config["training"]["batch_size"]
-    return (DataLoader(train_ds, batch, shuffle=True, num_workers=4, drop_last=True),
-            DataLoader(val_ds, 1, shuffle=False, num_workers=2),
-            DataLoader(test_ds, 1, shuffle=False, num_workers=2))
+    num_workers = config["training"].get("num_workers", 4)
+    pin_memory = config["training"].get("pin_memory", True)
+    persistent_workers = (num_workers > 0)
+
+    return (DataLoader(train_ds, batch, shuffle=True, num_workers=num_workers, drop_last=True,
+                       pin_memory=pin_memory, persistent_workers=persistent_workers),
+            DataLoader(val_ds, 1, shuffle=False, num_workers=2,
+                       pin_memory=pin_memory, persistent_workers=False),
+            DataLoader(test_ds, 1, shuffle=False, num_workers=2,
+                       pin_memory=pin_memory, persistent_workers=False))
