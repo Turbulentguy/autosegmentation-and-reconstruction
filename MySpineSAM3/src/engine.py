@@ -6,6 +6,7 @@ Training Engine for MySpineSAM3
 
 import os
 import csv
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
 import logging
@@ -20,7 +21,7 @@ from tqdm import tqdm
 from torchvision.utils import make_grid
 
 from torch.utils.tensorboard import SummaryWriter
-from monai.losses import DiceCELoss, HausdorffDTLoss
+from monai.losses import DiceLoss, HausdorffDTLoss
 
 from src.metrics import MetricCalculator, InferenceTimer
 
@@ -49,7 +50,6 @@ class Trainer:
         # Training config
         train_cfg = config["training"]
         self.num_epochs = train_cfg.get("num_epochs", 100)
-        self.num_epochs = train_cfg.get("num_epochs", 100)
         self.val_interval = train_cfg.get("val_interval", 2)
         self.hd95_interval = train_cfg.get("hd95_interval", 5)
         
@@ -61,7 +61,9 @@ class Trainer:
         # CSV Logging
         self.log_dir = Path("./logs")
         self.log_dir.mkdir(parents=True, exist_ok=True)
-        self.csv_path = self.log_dir / "training_metrics.csv"
+        # Unique timestamped filename: YYYYMMDD_HHMMSS_training_metrics.csv
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.csv_path = self.log_dir / f"{timestamp}_training_metrics.csv"
         
         # Initialize CSV with header (overwrites existing)
         with open(self.csv_path, mode="w", newline="") as f:
@@ -83,13 +85,19 @@ class Trainer:
         loss_cfg = train_cfg.get("loss", {})
         
         # 1. DiceCELoss (Volume Overlap)
-        self.criterion_dice = DiceCELoss(
+        # 1. Dice Loss (Volume Overlap)
+        self.criterion_dice_only = DiceLoss(
             include_background=False,
             to_onehot_y=True,
             softmax=True,
-            lambda_dice=loss_cfg.get("lambda_dice", 1.0),
-            lambda_ce=loss_cfg.get("lambda_ce", 1.0),
         )
+        self.lambda_dice = loss_cfg.get("lambda_dice", 1.0)
+        
+        # 1.b Cross Entropy Loss (Classification)
+        # Note: DiceCELoss uses standard CrossEntropyLoss internally for the CE part.
+        # It expects logits (no softmax).
+        self.criterion_ce = nn.CrossEntropyLoss()
+        self.lambda_ce = loss_cfg.get("lambda_ce", 1.0)
         
         # 2. HausdorffDTLoss (Boundary Accuracy)
         self.lambda_hd = loss_cfg.get("lambda_hausdorff", 0.0)
@@ -113,9 +121,12 @@ class Trainer:
         self.checkpoint_dir = Path(config.get("checkpoints", {}).get("save_dir", "./checkpoints"))
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
     
-    def train_epoch(self, epoch: int) -> float:
+    def train_epoch(self, epoch: int) -> Dict[str, float]:
         self.model.train()
         epoch_loss = 0.0
+        epoch_dice = 0.0
+        epoch_ce = 0.0
+        epoch_hd = 0.0
         
         pbar = tqdm(self.train_loader, desc=f"Epoch {epoch+1}/{self.num_epochs}", dynamic_ncols=True, mininterval=1.0)
         for batch in pbar:
@@ -125,9 +136,14 @@ class Trainer:
             self.optimizer.zero_grad()
             outputs = self.model(images)
             
-            # Combined Loss Calculation
-            loss_dice = self.criterion_dice(outputs, labels)
+            # Loss Components
+            loss_dice = self.criterion_dice_only(outputs, labels)
+            loss_ce = self.criterion_ce(outputs, labels.squeeze(1).long())
             
+            loss = (self.lambda_dice * loss_dice) + (self.lambda_ce * loss_ce)
+            
+            # HD95 Loss
+            loss_hd_val = 0.0
             if self.criterion_hd is not None:
                 # Need softmax probabilities for HD loss
                 if isinstance(outputs, list): # For deep supervision
@@ -136,17 +152,30 @@ class Trainer:
                     out_for_hd = torch.softmax(outputs, dim=1)
                     
                 loss_hd = self.criterion_hd(out_for_hd, labels)
-                loss = loss_dice + (self.lambda_hd * loss_hd)
-            else:
-                loss = loss_dice
-                
+                loss += (self.lambda_hd * loss_hd)
+                loss_hd_val = loss_hd.item()
+            
             loss.backward()
             self.optimizer.step()
             
             epoch_loss += loss.item()
-            pbar.set_postfix({"loss": f"{loss.item():.4f}"})
+            epoch_dice += loss_dice.item()
+            epoch_ce += loss_ce.item()
+            epoch_hd += loss_hd_val
+            
+            pbar.set_postfix({
+                "L": f"{loss.item():.3f}",
+                "D": f"{loss_dice.item():.3f}",
+                "C": f"{loss_ce.item():.3f}"
+            })
         
-        return epoch_loss / len(self.train_loader)
+        steps = len(self.train_loader)
+        return {
+            "total": epoch_loss / steps,
+            "dice": epoch_dice / steps,
+            "ce": epoch_ce / steps,
+            "hd": epoch_hd / steps
+        }
     
     @torch.no_grad()
     def validate(self, epoch: int) -> tuple:
@@ -175,8 +204,9 @@ class Trainer:
             with InferenceTimer() as timer:
                 outputs = self.model(images)
             
-            # Combined Loss Calculation
-            loss_dice = self.criterion_dice(outputs, labels)
+            # Loss Components
+            loss_dice = self.criterion_dice_only(outputs, labels)
+            loss_ce = self.criterion_ce(outputs, labels.squeeze(1).long())
             
             if self.criterion_hd is not None:
                 # Need softmax probabilities for HD loss
@@ -186,9 +216,9 @@ class Trainer:
                     out_for_hd = torch.softmax(outputs, dim=1)
                 
                 loss_hd = self.criterion_hd(out_for_hd, labels)
-                loss = loss_dice + (self.lambda_hd * loss_hd)
+                loss = (self.lambda_dice * loss_dice) + (self.lambda_ce * loss_ce) + (self.lambda_hd * loss_hd)
             else:
-                loss = loss_dice
+                loss = (self.lambda_dice * loss_dice) + (self.lambda_ce * loss_ce)
                 
             val_loss += loss.item()
             
@@ -245,11 +275,17 @@ class Trainer:
         logger.info(f"Starting training for {self.num_epochs} epochs")
         
         for epoch in range(self.num_epochs):
-            train_loss = self.train_epoch(epoch)
+            train_metrics = self.train_epoch(epoch)
+            train_loss = train_metrics["total"]
+            
             self.scheduler.step()
             
             # TensorBoard training loss
-            self.writer.add_scalar("Loss/train", train_loss, epoch)
+            self.writer.add_scalar("Loss/train_total", train_loss, epoch)
+            self.writer.add_scalar("Loss/train_dice_loss", train_metrics["dice"], epoch)
+            self.writer.add_scalar("Loss/train_ce_loss", train_metrics["ce"], epoch)
+            if self.criterion_hd is not None:
+                self.writer.add_scalar("Loss/train_hd_loss", train_metrics["hd"], epoch)
             
             if (epoch + 1) % self.val_interval == 0:
                 val_loss, avg_metrics = self.validate(epoch)
