@@ -21,7 +21,7 @@ class CTSpine1KDataset(Dataset):
     """PyTorch wrapper for CTSpine1K HuggingFace dataset."""
     
     def __init__(self, hf_dataset, transform=None, hu_min=-100, hu_max=1000, binary_mask=True,
-                 spatial_size=(96, 96, 96), is_train=True):
+                spatial_size=(96, 96, 96), is_train=True):
         self.hf_dataset = hf_dataset
         self.transform = transform
         self.hu_min, self.hu_max = hu_min, hu_max

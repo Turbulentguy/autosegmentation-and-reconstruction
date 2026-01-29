@@ -78,20 +78,26 @@ class LocalNiftiDataset(Dataset):
         val_ratio: float = 0.1,
         seed: int = 42,
         spatial_size: Tuple[int, int, int] = (96, 96, 96),
+        metadata_dir: Optional[str] = None,  # NEW: Path to metadata directory
+        lumbar_only: bool = False,  # NEW: Focus on lumbar vertebrae only
+        lumbar_classes: Optional[List[int]] = None,  # NEW: L1-L5 class indices
     ):
         self.data_dir = Path(data_dir)
+        self.metadata_dir = Path(metadata_dir) if metadata_dir else None
         self.transform = transform
         self.hu_min, self.hu_max = hu_min, hu_max
         self.binary_mask = binary_mask
         self.seed = seed
         self.spatial_size = spatial_size
         self.is_train = (split == "train")
+        self.lumbar_only = lumbar_only
+        self.lumbar_classes = lumbar_classes or [20, 21, 22, 23, 24]  # L1-L5 default
         
         # Find pairs and apply official splits
         all_pairs = self._find_all_pairs()
         self.pairs = self._apply_split(all_pairs, split, train_ratio, val_ratio)
         
-        logger.info(f"LocalNiftiDataset: {len(self.pairs)} {split} pairs, spatial_size={spatial_size}, binary_mask={binary_mask}")
+        logger.info(f"LocalNiftiDataset: {len(self.pairs)} {split} pairs, spatial_size={spatial_size}, binary_mask={binary_mask}, lumbar_only={lumbar_only}")
     
     def _find_all_pairs(self) -> Dict[str, Tuple[Path, Path]]:
         """Find all matching image and segmentation pairs recursively."""
@@ -132,18 +138,41 @@ class LocalNiftiDataset(Dataset):
         - test_private: 198 samples → testing
         Total: 1,005 samples
         """
-        # Try to load official splits from local data/metadata first
-        split_file = Path(__file__).parent.parent / "data" / "metadata" / "data_split.txt"
-        if not split_file.exists():
-            # Try HuggingFace cache location
-            split_file = self.data_dir / "metadata" / "data_split.txt"
-        if not split_file.exists():
-            for parent in [self.data_dir.parent, self.data_dir]:
-                alt_path = parent / "data" / "metadata" / "data_split.txt"
-                if alt_path.exists():
-                    split_file = alt_path
+        # Try to load official splits with multiple fallback paths
+        split_file = None
+        
+        # Priority 1: Use metadata_dir if provided
+        if self.metadata_dir:
+            candidate = self.metadata_dir / "data_split.txt"
+            if candidate.exists():
+                split_file = candidate
+        
+        # Priority 2: Try local data/metadata
+        if not split_file:
+            candidate = Path(__file__).parent.parent / "data" / "metadata" / "data_split.txt"
+            if candidate.exists():
+                split_file = candidate
+        
+        # Priority 3: Try data_dir/metadata
+        if not split_file:
+            candidate = self.data_dir / "metadata" / "data_split.txt"
+            if candidate.exists():
+                split_file = candidate
+        
+        # Priority 4: Try parent directories
+        if not split_file:
+            for parent in [self.data_dir.parent, self.data_dir.parent.parent]:
+                candidate = parent / "metadata" / "data_split.txt"
+                if candidate.exists():
+                    split_file = candidate
                     break
         
+        if not split_file or not split_file.exists():
+            logger.error(f"Could not find data_split.txt! Searched in metadata_dir, data_dir, and parent directories")
+            logger.error(f"metadata_dir: {self.metadata_dir}, data_dir: {self.data_dir}")
+            raise FileNotFoundError("data_split.txt not found in any expected location")
+        
+        logger.info(f"Using split file: {split_file}")
         official_splits = parse_data_split(split_file)
         
         # Collect pairs for each official split
@@ -270,15 +299,24 @@ class LocalNiftiDataset(Dataset):
         image = np.clip(image, self.hu_min, self.hu_max)
         image = (image - self.hu_min) / (self.hu_max - self.hu_min)
         
-        # Binary mask if needed
-        if self.binary_mask:
+        # Lumbar-only segmentation: Convert class indices to 0-6
+        if self.lumbar_only:
+            # Create new label map: Background=0, L1=1, L2=2, L3=3, L4=4, L5=5, L6=6
+            # Handles pathological cases: 24 sacral lumbarization + 13 lumbar sacralization
+            # CTSpine1K classes: L1=20, L2=21, L3=22, L4=23, L5=24, L6=25
+            new_label = np.zeros_like(label)
+            for new_idx, orig_class in enumerate(self.lumbar_classes, start=1):
+                new_label[label == orig_class] = new_idx
+            label = new_label
+        # Binary mask if needed (and not lumbar-only)
+        elif self.binary_mask:
             label = (label > 0).astype(np.int64)
         
         # Add channel dimension: (H, W, D) -> (1, H, W, D)
         image = np.expand_dims(image, 0)
         label = np.expand_dims(label, 0)
         
-        # Random crop to spatial_size (e.g., 96x96x96)
+        # Random crop to spatial_size (e.g., 96x96x96 or 128x128x128)
         image, label = self._random_crop(image, label)
         
         data = {
@@ -301,6 +339,7 @@ def get_local_dataloaders(config, train_transform=None, val_transform=None):
     """Create dataloaders from local NIfTI files with official splits."""
     data_cfg = config["data"]
     data_dir = data_cfg.get("local_data_dir", data_cfg.get("root_dir", "./data/ctspine1k_raw"))
+    metadata_dir = data_cfg.get("metadata_dir")  # NEW: Get metadata directory
     
     kwargs = dict(
         hu_min=data_cfg.get("hu_min", -100),
@@ -313,6 +352,9 @@ def get_local_dataloaders(config, train_transform=None, val_transform=None):
         val_ratio=data_cfg.get("split", {}).get("val", 0.15),
         seed=config.get("project", {}).get("seed", 42),
         spatial_size=tuple(data_cfg.get("spatial_size", [96, 96, 96])),
+        metadata_dir=metadata_dir,  # NEW: Pass metadata directory
+        lumbar_only=data_cfg.get("lumbar_only", False),  # NEW: Lumbar segmentation
+        lumbar_classes=data_cfg.get("lumbar_classes", [20, 21, 22, 23, 24]),  # NEW
     )
     
     train_ds = LocalNiftiDataset(data_dir, "train", train_transform, **kwargs)

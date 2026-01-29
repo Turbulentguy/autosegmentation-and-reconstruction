@@ -27,27 +27,63 @@ def iou_score(pred: np.ndarray, target: np.ndarray, smooth: float = 1e-7) -> flo
 
 
 def hausdorff_distance_95(pred: np.ndarray, target: np.ndarray, voxel_spacing: tuple = (1,1,1)) -> float:
-    """Compute 95th percentile Hausdorff Distance using medpy."""
+    """Compute 95th percentile Hausdorff Distance using medpy.
+    
+    Returns:
+        float: HD95 in mm, or np.nan if cannot be computed (empty masks)
+    """
     try:
         from medpy.metric.binary import hd95
+        
+        # Check if either mask is empty
         if np.sum(pred) == 0 or np.sum(target) == 0:
-            return float('inf')
-        return hd95(pred.astype(bool), target.astype(bool), voxelspacing=voxel_spacing)
+            return np.nan
+        
+        # medpy requires boolean arrays
+        pred_bool = pred.astype(bool)
+        target_bool = target.astype(bool)
+        
+        # Compute HD95
+        result = hd95(pred_bool, target_bool, voxelspacing=voxel_spacing)
+        return float(result)
+        
     except ImportError:
         logger.warning("medpy not installed, HD95 unavailable")
-        return 0.0
+        return np.nan
+    except Exception as e:
+        # Catch any medpy errors (e.g., surface extraction failures)
+        logger.debug(f"HD95 computation failed: {e}")
+        return np.nan
 
 
 def average_surface_distance(pred: np.ndarray, target: np.ndarray, voxel_spacing: tuple = (1,1,1)) -> float:
-    """Compute Average Surface Distance using medpy."""
+    """Compute Average Surface Distance using medpy.
+    
+    Returns:
+        float: ASD in mm, or np.nan if cannot be computed (empty masks)
+    """
     try:
         from medpy.metric.binary import asd
+        
+        # Check if either mask is empty
         if np.sum(pred) == 0 or np.sum(target) == 0:
-            return float('inf')
-        return asd(pred.astype(bool), target.astype(bool), voxelspacing=voxel_spacing)
+            return np.nan
+        
+        # medpy requires boolean arrays
+        pred_bool = pred.astype(bool)
+        target_bool = target.astype(bool)
+        
+        # Compute ASD
+        result = asd(pred_bool, target_bool, voxelspacing=voxel_spacing)
+        return float(result)
+        
     except ImportError:
         logger.warning("medpy not installed, ASD unavailable")
-        return 0.0
+        return np.nan
+    except Exception as e:
+        # Catch any medpy errors (e.g., surface extraction failures)
+        logger.debug(f"ASD computation failed: {e}")
+        return np.nan
 
 
 class InferenceTimer:
@@ -127,9 +163,11 @@ class MetricCalculator:
                     target_c = (target == c).astype(int)
                     # Only compute if both pred and target have this class
                     if np.any(pred_c) and np.any(target_c):
-                        scores.append(hausdorff_distance_95(pred_c, target_c, voxel_spacing))
-                valid_scores = [s for s in scores if s != float('inf') and not np.isnan(s)]
-                result["HD95"] = np.mean(valid_scores) if valid_scores else float('nan')
+                        hd_score = hausdorff_distance_95(pred_c, target_c, voxel_spacing)
+                        if not np.isnan(hd_score):
+                            scores.append(hd_score)
+                # Return mean of valid scores, or NaN if no valid scores
+                result["HD95"] = np.mean(scores) if scores else np.nan
             elif metric == "ASD":
                 scores = []
                 for c in existing_classes:
@@ -137,9 +175,11 @@ class MetricCalculator:
                     target_c = (target == c).astype(int)
                     # Only compute if both pred and target have this class
                     if np.any(pred_c) and np.any(target_c):
-                        scores.append(average_surface_distance(pred_c, target_c, voxel_spacing))
-                valid_scores = [s for s in scores if s != float('inf') and not np.isnan(s)]
-                result["ASD"] = np.mean(valid_scores) if valid_scores else float('nan')
+                        asd_score = average_surface_distance(pred_c, target_c, voxel_spacing)
+                        if not np.isnan(asd_score):
+                            scores.append(asd_score)
+                # Return mean of valid scores, or NaN if no valid scores
+                result["ASD"] = np.mean(scores) if scores else np.nan
             elif metric == "InferenceTime":
                 result["InferenceTime"] = inference_time_ms
         

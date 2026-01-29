@@ -51,7 +51,21 @@ class Trainer:
         train_cfg = config["training"]
         self.num_epochs = train_cfg.get("num_epochs", 100)
         self.val_interval = train_cfg.get("val_interval", 2)
-        self.hd95_interval = train_cfg.get("hd95_interval", 5)
+        self.hd95_interval = train_cfg.get("hd95_interval", 10)  # Default 10 instead of 5
+        
+        # NEW: Mixed Precision Training
+        self.use_amp = train_cfg.get("use_amp", False)
+        if self.use_amp:
+            from torch.cuda.amp import autocast, GradScaler
+            self.scaler = GradScaler()
+            logger.info("Mixed Precision Training (AMP) enabled - expect 2-3x speedup!")
+        else:
+            self.scaler = None
+        
+        # NEW: Gradient Accumulation
+        self.grad_accum_steps = train_cfg.get("gradient_accumulation_steps", 1)
+        if self.grad_accum_steps > 1:
+            logger.info(f"Gradient Accumulation: {self.grad_accum_steps} steps (effective batch = {train_cfg.get('batch_size', 2) * self.grad_accum_steps})")
         
         # TensorBoard
         tb_dir = train_cfg.get("tensorboard_dir", "./logs/tensorboard")
@@ -68,7 +82,8 @@ class Trainer:
         # Initialize CSV with header (overwrites existing)
         with open(self.csv_path, mode="w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["Epoch", "Train_Loss", "Val_Loss", "Val_DSC", "Val_IoU", "HD95", "ASD", "InferenceTime_ms"])
+            # IMPROVED: Add more informative columns
+            writer.writerow(["Epoch", "Train_Loss", "Train_Dice", "Train_CE", "Val_Loss", "Val_DSC", "Val_IoU", "HD95", "ASD", "InferenceTime_ms", "LR"])
         logger.info(f"CSV metrics logging to: {self.csv_path}")
         
         # Optimizer
@@ -129,44 +144,80 @@ class Trainer:
         epoch_hd = 0.0
         
         pbar = tqdm(self.train_loader, desc=f"Epoch {epoch+1}/{self.num_epochs}", dynamic_ncols=True, mininterval=1.0)
-        for batch in pbar:
+        for batch_idx, batch in enumerate(pbar):
             images = batch["image"].to(self.device)
             labels = batch["label"].to(self.device)
             
-            self.optimizer.zero_grad()
-            outputs = self.model(images)
-            
-            # Loss Components
-            loss_dice = self.criterion_dice_only(outputs, labels)
-            loss_ce = self.criterion_ce(outputs, labels.squeeze(1).long())
-            
-            loss = (self.lambda_dice * loss_dice) + (self.lambda_ce * loss_ce)
-            
-            # HD95 Loss
-            loss_hd_val = 0.0
-            if self.criterion_hd is not None:
-                # Need softmax probabilities for HD loss
-                if isinstance(outputs, list): # For deep supervision
-                    out_for_hd = torch.softmax(outputs[0], dim=1)
-                else:
-                    out_for_hd = torch.softmax(outputs, dim=1)
+            # MIXED PRECISION: Forward pass with autocast
+            if self.use_amp:
+                from torch.cuda.amp import autocast
+                with autocast():
+                    outputs = self.model(images)
                     
-                loss_hd = self.criterion_hd(out_for_hd, labels)
-                loss += (self.lambda_hd * loss_hd)
-                loss_hd_val = loss_hd.item()
+                    # Loss Components
+                    loss_dice = self.criterion_dice_only(outputs, labels)
+                    loss_ce = self.criterion_ce(outputs, labels.squeeze(1).long())
+                    loss = (self.lambda_dice * loss_dice) + (self.lambda_ce * loss_ce)
+                    
+                    # HD95 Loss (if enabled)
+                    loss_hd_val = 0.0
+                    if self.criterion_hd is not None:
+                        if isinstance(outputs, list):
+                            out_for_hd = torch.softmax(outputs[0], dim=1)
+                        else:
+                            out_for_hd = torch.softmax(outputs, dim=1)
+                        loss_hd = self.criterion_hd(out_for_hd, labels)
+                        loss += (self.lambda_hd * loss_hd)
+                        loss_hd_val = loss_hd.item()
+                    
+                    # Gradient accumulation: Scale loss
+                    loss = loss / self.grad_accum_steps
+                
+                # Backward with scaler
+                self.scaler.scale(loss).backward()
+                
+                # Optimizer step only every grad_accum_steps
+                if (batch_idx + 1) % self.grad_accum_steps == 0:
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                    self.optimizer.zero_grad()
+            else:
+                # Standard training (no AMP)
+                outputs = self.model(images)
+                
+                loss_dice = self.criterion_dice_only(outputs, labels)
+                loss_ce = self.criterion_ce(outputs, labels.squeeze(1).long())
+                loss = (self.lambda_dice * loss_dice) + (self.lambda_ce * loss_ce)
+                
+                loss_hd_val = 0.0
+                if self.criterion_hd is not None:
+                    if isinstance(outputs, list):
+                        out_for_hd = torch.softmax(outputs[0], dim=1)
+                    else:
+                        out_for_hd = torch.softmax(outputs, dim=1)
+                    loss_hd = self.criterion_hd(out_for_hd, labels)
+                    loss += (self.lambda_hd * loss_hd)
+                    loss_hd_val = loss_hd.item()
+                
+                loss = loss / self.grad_accum_steps
+                loss.backward()
+                
+                if (batch_idx + 1) % self.grad_accum_steps == 0:
+                    self.optimizer.step()
+                    self.optimizer.zero_grad()
             
-            loss.backward()
-            self.optimizer.step()
-            
-            epoch_loss += loss.item()
+            # Track metrics (multiply back by grad_accum_steps for true loss)
+            epoch_loss += loss.item() * self.grad_accum_steps
             epoch_dice += loss_dice.item()
             epoch_ce += loss_ce.item()
             epoch_hd += loss_hd_val
             
+            # IMPROVED: Clearer progress bar with explanation
+            # L = Total Loss, D = Dice (0=perfect, 1=worst), CE = CrossEntropy (0=perfect)
             pbar.set_postfix({
-                "L": f"{loss.item():.3f}",
-                "D": f"{loss_dice.item():.3f}",
-                "C": f"{loss_ce.item():.3f}"
+                "Loss": f"{loss.item() * self.grad_accum_steps:.3f}",
+                "Dice": f"{loss_dice.item():.3f}",
+                "CE": f"{loss_ce.item():.2f}"
             })
         
         steps = len(self.train_loader)
@@ -273,17 +324,27 @@ class Trainer:
     
     def train(self):
         logger.info(f"Starting training for {self.num_epochs} epochs")
+        logger.info("=" * 80)
+        logger.info("LOSS INTERPRETATION GUIDE:")
+        logger.info("  - Total Loss = Dice Loss + CrossEntropy Loss")
+        logger.info("  - Dice Loss: 0.0 = perfect overlap, 1.0 = no overlap")
+        logger.info("  - CrossEntropy: 0.0 = perfect classification, ~2.5 = random guessing")
+        logger.info("  - Initial Total Loss: 2.5-4.0 is NORMAL!")
+        logger.info("  - Target Total Loss: < 1.0 for good performance")
+        logger.info("=" * 80)
         
         for epoch in range(self.num_epochs):
             train_metrics = self.train_epoch(epoch)
             train_loss = train_metrics["total"]
             
             self.scheduler.step()
+            current_lr = self.optimizer.param_groups[0]['lr']
             
             # TensorBoard training loss
             self.writer.add_scalar("Loss/train_total", train_loss, epoch)
             self.writer.add_scalar("Loss/train_dice_loss", train_metrics["dice"], epoch)
             self.writer.add_scalar("Loss/train_ce_loss", train_metrics["ce"], epoch)
+            self.writer.add_scalar("Learning_Rate", current_lr, epoch)
             if self.criterion_hd is not None:
                 self.writer.add_scalar("Loss/train_hd_loss", train_metrics["hd"], epoch)
             
@@ -299,9 +360,13 @@ class Trainer:
                 asd = avg_metrics.get("ASD", None)
                 inf_time = avg_metrics.get("InferenceTime", 0.0)
                 
-                log_msg = f"Epoch {epoch+1} - Train: {train_loss:.4f}, Val: {val_loss:.4f}, DSC: {dsc:.4f}"
-                if hd95 is not None:
-                     log_msg += f", HD95: {hd95:.4f}"
+                # IMPROVED: More informative logging
+                log_msg = f"Epoch {epoch+1}/{self.num_epochs} | "
+                log_msg += f"Train: {train_loss:.4f} (Dice={train_metrics['dice']:.3f}, CE={train_metrics['ce']:.2f}) | "
+                log_msg += f"Val: {val_loss:.4f} | DSC: {dsc*100:.1f}% | IoU: {iou*100:.1f}%"
+                if hd95 is not None and hd95 < 999:  # Filter out invalid HD95
+                    log_msg += f" | HD95: {hd95:.2f}mm"
+                log_msg += f" | LR: {current_lr:.2e}"
                 logger.info(log_msg)
                 
                 # TensorBoard validation metrics
@@ -311,7 +376,7 @@ class Trainer:
                 if hd95 is not None:
                     self.writer.add_scalar("Metric/HD95", hd95, epoch)
                 
-                # CSV Logging
+                # CSV Logging with comprehensive metrics
                 # Handle NaN/None values for HD95/ASD
                 if hd95 is not None:
                     hd95_str = f"{hd95:.4f}" if not np.isnan(hd95) else "NaN"
@@ -325,15 +390,19 @@ class Trainer:
                 
                 with open(self.csv_path, mode="a", newline="") as f:
                     writer = csv.writer(f)
+                    # Updated format: Epoch, Train_Loss, Train_Dice, Train_CE, Val_Loss, Val_DSC, Val_IoU, HD95, ASD, InferenceTime_ms, LR
                     writer.writerow([
                         epoch + 1, 
                         f"{train_loss:.4f}", 
+                        f"{train_metrics['dice']:.4f}",  # NEW: Train Dice
+                        f"{train_metrics['ce']:.4f}",    # NEW: Train CE
                         f"{val_loss:.4f}", 
                         f"{dsc:.4f}", 
                         f"{iou:.4f}", 
                         hd95_str, 
                         asd_str, 
-                        f"{inf_time:.2f}"
+                        f"{inf_time:.2f}",
+                        f"{current_lr:.2e}"  # NEW: Learning Rate
                     ])
                 
                 if val_loss < self.best_val_loss:

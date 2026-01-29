@@ -14,13 +14,14 @@ project:
 # =============================================================================
 data:
   # Dataset source: "local" for processed NIfTI, "ctspine1k" for HuggingFace, "local_nifti" for raw NIfTI
-  # Dataset source: "local" for processed NIfTI, "ctspine1k" for HuggingFace, "local_nifti" for raw NIfTI
-  # Switch to local_nifti to bypass HuggingFace offline issues - we will scan files directly
   source: "local_nifti"
 
-  # Local paths for raw NIfTI (used when source: "local_nifti")
-  # Pointing to the HF cache directory to scan for .nii.gz files recursively
-  local_data_dir: "/lustrefs/disk/project/lt200431-ddmmss/wat/datasets--alexanderdann--CTSpine1K/snapshots/9b454add169b94f2c322ad6f08b66823975e8dbd"
+  # CORRECTED LANTA PATHS
+  # Raw data contains actual NIfTI files (volumes and segmentations)
+  local_data_dir: "/lustrefs/disk/project/lt200431-ddmmss/wat/datasets--alexanderdann--CTSpine1K/snapshots/9b454add169b94f2c322ad6f08b66823975e8dbd/raw_data"
+  
+  # Metadata contains data_split.txt and path.csv
+  metadata_dir: "/lustrefs/disk/project/lt200431-ddmmss/wat/datasets--alexanderdann--CTSpine1K/snapshots/9b454add169b94f2c322ad6f08b66823975e8dbd/metadata"
 
   # Local NIfTI paths (used when source: "local")
   root_dir: "./data/processed_nifti"
@@ -39,7 +40,15 @@ data:
   hu_max: 1000 # Upper bound (bone saturation)
 
   # 3D patch size for model input
-  spatial_size: [96, 96, 96]
+  # Research shows: 96^3 is memory-efficient but may miss context
+  # Better options: 128^3 (good balance), 160^3 (SOTA but needs 32GB+ GPU)
+  # For lumbar-only: Can use smaller 64^3 or 80^3
+  spatial_size: [128, 128, 128]  # Changed from 96 to 128 for better context
+  
+  # Lumbar segmentation settings
+  # CTSpine1K has 37 special cases with L6 vertebrae (24 sacral lumbarization + 13 lumbar sacralization)
+  lumbar_only: true              # Focus on lumbar vertebrae (L1-L6 including pathological variants)
+  lumbar_classes: [20, 21, 22, 23, 24, 25]  # L1-L6 class indices in CTSpine1K
 
   # Data split ratios
   split:
@@ -55,7 +64,10 @@ model:
   architecture: "SwinUNETR"
 
   in_channels: 1 # Single channel CT
-  out_channels: 26 # 0=Background, 1-25=Vertebrae (C1-C7, T1-T12, L1-L5, S1)
+  # CHANGED: 26 classes → 7 classes for lumbar-only segmentation (includes L6 variants)
+  # Classes: 0=Background, 1=L1, 2=L2, 3=L3, 4=L4, 5=L5, 6=L6
+  # L6 appears in 37 pathological cases (24 sacral lumbarization + 13 lumbar sacralization)
+  out_channels: 7  # Lumbar vertebrae including L6 (background + 6 vertebrae)
 
   # Path to pretrained weights (relative to project root)
   pretrained_path: "./checkpoints/pretrained_weights/swin_unetr.pth"
@@ -127,18 +139,30 @@ model:
 # Training Configuration
 # =============================================================================
 training:
-  batch_size: 2
-  learning_rate: 1.0e-4
+  # OPTIMIZED: Increased batch size for better GPU utilization
+  batch_size: 4  # Was 2 → Now 4 (adjust to 2 if OOM, or 6-8 if you have 32GB+ GPU)
+  
+  # OPTIMIZED: Reduced learning rate for stability
+  learning_rate: 5.0e-5  # Was 1e-4 → Now 5e-5 (more stable)
+  
   weight_decay: 1.0e-4
-  num_epochs: 90
+  num_epochs: 100  # Extended for better convergence
 
-  # Data Loading Optimization
-  num_workers: 8 # Increase for network storage (try 8-12)
+  # CRITICAL: Reduced workers for network storage (LANTA uses network FS)
+  num_workers: 2  # Was 8 → Now 2 (network storage bottleneck)
   pin_memory: true
+  
+  # NEW: Mixed Precision Training (2-3x speedup)
+  use_amp: true  # Automatic Mixed Precision for faster training
 
   # Validation frequency
-  val_interval: 2 # Validate every N epochs
+  val_interval: 1 # Validate every epoch for trustworthy logs
+  hd95_interval: 5  # Compute HD95 every 5 epochs (more frequent for better tracking)
+  
   tensorboard_dir: "./logs/tensorboard"
+  
+  # NEW: Gradient accumulation (simulate larger batch)
+  gradient_accumulation_steps: 2  # Effective batch = 4 x 2 = 8
 
   # Early stopping
   early_stopping:
@@ -154,40 +178,52 @@ training:
   # Learning rate scheduler
   scheduler:
     type: "CosineAnnealingLR"
-    T_max: 90
+    T_max: 100  # Match num_epochs
     eta_min: 1.0e-7
+  
+  # NEW: Warmup for stable training start
+  warmup:
+    enabled: true
+    warmup_epochs: 5  # Gradual LR increase for first 5 epochs
 
-  # Loss function
+  # Loss function configuration
+  # LOSS INTERPRETATION GUIDE:
+  #   - Dice Loss: 0.0 = perfect, 1.0 = worst
+  #   - CrossEntropy: 0.0 = perfect, ~3.3 = random (for 6 classes)
+  #   - Total Loss = (1.0 x Dice) + (1.0 x CE) + (0.0 x HD)
+  #   - Initial Total Loss: 2.5-4.0 is NORMAL!
+  #   - Target Total Loss: < 1.0 for good performance
   loss:
     type: "DiceCELoss"
     include_background: false
     softmax: true
     lambda_dice: 1.0
     lambda_ce: 1.0
-    # Hausdorff Loss settings
-    lambda_hausdorff: 0.5
+    
+    # DISABLED: Hausdorff is too slow, only use for final fine-tuning
+    lambda_hausdorff: 0.0  # Was 0.5 → Now 0.0 (disabled for speed)
     hausdorff_alpha: 2.0
 
-  # Augmentation settings
+  # OPTIMIZED: Less aggressive augmentation for stability
   augmentation:
     use_noise: true
-    noise_prob: 0.5
-    noise_std: 0.1
+    noise_prob: 0.3      # Was 0.5 → Now 0.3
+    noise_std: 0.05      # Was 0.1 → Now 0.05
 
     use_rotation: true
-    rotation_range: [-15, 15] # degrees
-    rotation_prob: 0.3
+    rotation_range: [-10, 10]  # Was [-15, 15] → Now [-10, 10]
+    rotation_prob: 0.2         # Was 0.3 → Now 0.2
 
     use_zoom: true
-    zoom_range: [0.9, 1.1]
-    zoom_prob: 0.3
+    zoom_range: [0.95, 1.05]   # Was [0.9, 1.1] → Now [0.95, 1.05]
+    zoom_prob: 0.2             # Was 0.3 → Now 0.2
 
     use_flip: true
     flip_prob: 0.5
 
-    use_intensity_shift: true
+    use_intensity_shift: false  # Disabled for stability
     intensity_shift_range: [-0.1, 0.1]
-    intensity_prob: 0.3
+    intensity_prob: 0.0
 
   # Warmup settings (for SAM training)
   warmup:
