@@ -1,0 +1,23 @@
+data:
+  # Dataset source paths
+  meta_path: /lustrefs/disk/project/lt200431-ddmmss/wat/datasets--alexanderdann--CTSpine1K/snapshots/9b454add169b94f2c322ad6f08b66823975e8dbd/metadata/data_split.txt
+  images_dir: /lustrefs/disk/project/lt200431-ddmmss/wat/datasets--alexanderdann--CTSpine1K/snapshots/9b454add169b94f2c322ad6f08b66823975e8dbd/raw_data/volumes/
+  masks_dir: /lustrefs/disk/project/lt200431-ddmmss/wat/datasets--alexanderdann--CTSpine1K/snapshots/9b454add169b94f2c322ad6f08b66823975e8dbd/raw_data/labels/
+  
+  # Dataset categorized paths
+  train_images_dir: /lustrefs/disk/project/lt200431-ddmmss/nnUNet_raw/Dataset001_CTSpine1K/categorized_data/train/images/
+  train_masks_dir: /lustrefs/disk/project/lt200431-ddmmss/nnUNet_raw/Dataset001_CTSpine1K/categorized_data/train/masks/
+  val_images_dir: /lustrefs/disk/project/lt200431-ddmmss/nnUNet_raw/Dataset001_CTSpine1K/categorized_data/validation/images/
+  val_masks_dir: /lustrefs/disk/project/lt200431-ddmmss/nnUNet_raw/Dataset001_CTSpine1K/categorized_data/validation/masks/
+  test_images_dir: /lustrefs/disk/project/lt200431-ddmmss/nnUNet_raw/Dataset001_CTSpine1K/categorized_data/test/images/
+  
+  # Classes information
+  num_classes: 26
+  num_classes_lumbar: 6
+  lumbar_classes: [0, 20, 21, 22, 23, 24, 25]
+  remapped_lumbar_classes: [0, 1, 2, 3, 4, 5, 6]
+
+  # Dataset split information
+  train_pairs: 610
+  val_pairs: 197
+  test_pairs: 198
