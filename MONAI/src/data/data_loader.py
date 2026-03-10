@@ -12,7 +12,7 @@ with open("configs/configs.yaml", "r") as f:
 batch_size = config["training"]["batch_size"]
 num_workers = config["training"]["num_workers"]
 
-def train_loader(train_pairs):
+def get_train_loader(train_pairs):
     train_ds = CacheDataset(
         data = train_pairs,
         transform = train_transforms(),
@@ -30,7 +30,7 @@ def train_loader(train_pairs):
 
     return train_loader
 
-def val_loader(val_pairs):
+def get_val_loader(val_pairs):
     val_ds = CacheDataset(
         data = val_pairs,
         transform = val_transforms(),
@@ -48,7 +48,7 @@ def val_loader(val_pairs):
 
     return val_loader
 
-def test_loader(test_pairs):
+def get_test_loader(test_pairs):
     test_ds = CacheDataset(
         data = test_pairs,
         transform = test_transforms(),
