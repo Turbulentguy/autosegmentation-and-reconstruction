@@ -1,4 +1,3 @@
-import yaml
 from monai.transforms import (
     LoadImaged, 
     Compose, 
@@ -12,9 +11,6 @@ from monai.transforms import (
 )
 
 from src.utils.label_remap import label_remap
-
-with open("../configs/configs.yaml", "r") as f:
-    config = yaml.safe_load(f)
 
 def train_transforms():
     train_transforms = Compose([
@@ -39,7 +35,7 @@ def train_transforms():
                         margin = 10),
         RandCropByPosNegLabeld(keys = ["image", "mask"], 
                             label_key = "mask", 
-                            spatial_size = (160, 160, 160), 
+                            spatial_size = (96, 96, 96), 
                             pos = 3, 
                             neg = 1,
                             num_samples = 4),

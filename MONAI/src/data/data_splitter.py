@@ -2,27 +2,38 @@ import os
 from tqdm import tqdm
 import yaml
 
+with open("configs/configs.yaml", "r") as f:
+    config = yaml.safe_load(f)
+
+images_dir = config["data"]["images_dir"]
+masks_dir = config["data"]["masks_dir"]
+meta_path = config["data"]["meta_path"]
+
 def data_split():
-    with open("configs/configs.yaml", "r") as f:
-        config = yaml.safe_load(f)
 
-    os.makedirs(config["data"]["train_images_dir"], exist_ok = True)
-    os.makedirs(config["data"]["train_masks_dir"], exist_ok = True)
-    os.makedirs(config["data"]["val_images_dir"], exist_ok = True)
-    os.makedirs(config["data"]["val_masks_dir"], exist_ok = True)
-    os.makedirs(config["data"]["test_images_dir"], exist_ok = True)
+    train_images_dir = config["data"]["train_images_dir"]
+    train_masks_dir = config["data"]["train_masks_dir"]
+    val_images_dir = config["data"]["val_images_dir"]
+    val_masks_dir = config["data"]["val_masks_dir"]
+    test_images_dir = config["data"]["test_images_dir"]
 
+    os.makedirs(train_images_dir, exist_ok=True)
+    os.makedirs(train_masks_dir, exist_ok=True)
+    os.makedirs(val_images_dir, exist_ok=True)
+    os.makedirs(val_masks_dir, exist_ok=True)
+    os.makedirs(test_images_dir, exist_ok=True)
+    
     images_file_index = {}
     masks_file_index = {}
 
-    for root, dirs, files in os.walk(config["data"]["images_dir"]):
+    for root, _, files in os.walk(images_dir):
         for f in files:
             if f.endswith(".nii.gz"):
                 images_file_index[f] = os.path.join(root, f)
 
     print(f"Indexed {len(images_file_index)} files.")
 
-    for root, dirs, files in os.walk(config["data"]["masks_dir"]):
+    for root, _, files in os.walk(masks_dir):
         for f in files:
             if f.endswith("_seg.nii.gz"):
                 masks_file_index[f] = os.path.join(root, f)
@@ -35,7 +46,7 @@ def data_split():
 
     mode = None
 
-    with open(config["data"]["meta_path"], "r") as files:
+    with open(meta_path, "r") as files:
         for line in tqdm(files):
             line = line.strip()
             
@@ -65,11 +76,11 @@ def data_split():
                 test_cases.append(case_id)
 
             source = images_file_index[filename]
-            train_destination = os.path.join(config["data"]["train_images_dir"], case_id + "_0000.nii.gz")
-            train_mask_destination = os.path.join(config["data"]["train_masks_dir"], case_id + "_0000_seg.nii.gz")
-            validation_destination = os.path.join(config["data"]["val_images_dir"], case_id + "_0000.nii.gz")
-            validation_mask_destination = os.path.join(config["data"]["val_masks_dir"], case_id + "_0000_seg.nii.gz")
-            test_destination = os.path.join(config["data"]["test_images_dir"], case_id + "_0000.nii.gz")
+            train_destination = os.path.join(train_images_dir, case_id + "_0000.nii.gz")
+            train_mask_destination = os.path.join(train_masks_dir, case_id + "_0000_seg.nii.gz")
+            validation_destination = os.path.join(val_images_dir, case_id + "_0000.nii.gz")
+            validation_mask_destination = os.path.join(val_masks_dir, case_id + "_0000_seg.nii.gz")
+            test_destination = os.path.join(test_images_dir, case_id + "_0000.nii.gz")
 
             if mode == "training":
                 if not os.path.exists(train_destination):

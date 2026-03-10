@@ -19,5 +19,5 @@ print(f"Number of unique values: {len(vals)}")
 
 config["data"]["num_classes"] = len(vals)
 
-with open("config/config.yaml", "w") as f:
+with open("configs/configs.yaml", "w") as f:
     yaml.dump(config, f)
