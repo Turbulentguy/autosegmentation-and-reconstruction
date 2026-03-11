@@ -6,13 +6,13 @@ from monai.metrics import (
 def get_dice():
     dice = DiceMetric(
         include_background = False,
-        reduction = "mean"
+        reduction = "none"
     )
     return dice
 
 def get_iou():
     iou = MeanIoU(
         include_background = False,
-        reduction = "mean"
+        reduction = "none"
     )
     return iou

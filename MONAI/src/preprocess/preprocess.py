@@ -68,7 +68,7 @@ def val_transforms():
 
 def test_transforms():
     test_transforms = Compose([
-        LoadImaged(keys = ["image","mask"]),
+        LoadImaged(keys = ["image"]),
         ScaleIntensityRangePercentilesd(keys = ["image"],
                                         lower = 5,
                                         upper = 99,
@@ -76,15 +76,13 @@ def test_transforms():
                                         b_max = 1,
                                         clip = True
         ), 
-        EnsureChannelFirstd(keys = ["image", "mask"]),
-        Orientationd(keys = ["image", "mask"], 
+        EnsureChannelFirstd(keys = ["image"]),
+        Orientationd(keys = ["image"], 
                 axcodes = "RAS"),
-        Spacingd(keys = ["image", "mask"],
+        Spacingd(keys = ["image"],
                 pixdim = (1.0, 1.0, 1.0),
-                mode = ("trilinear", "nearest")),
-        Lambdad(keys = ["mask"], 
-                func = label_remap),
-        CropForegroundd(keys = ["image", "mask"], 
+                mode = ("trilinear",)),
+        CropForegroundd(keys = ["image"], 
                         source_key = "image", 
                         margin = 10),
     ])

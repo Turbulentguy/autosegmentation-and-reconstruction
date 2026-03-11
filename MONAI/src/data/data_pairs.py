@@ -11,7 +11,7 @@ val_images_dir = config["data"]["val_images_dir"]
 val_masks_dir = config["data"]["val_masks_dir"]
 test_images_dir = config["data"]["test_images_dir"]
 
-def data_pairs():
+def data_pairs(config_path=None):
     
     train_images = sorted(glob(os.path.join(train_images_dir, "*_0000.nii.gz")))
     train_masks = sorted(glob(os.path.join(train_masks_dir, "*_0000_seg.nii.gz")))

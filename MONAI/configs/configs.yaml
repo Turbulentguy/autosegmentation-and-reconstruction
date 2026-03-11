@@ -19,6 +19,7 @@ data:
   num_classes_lumbar: 7
   lumbar_classes: [0, 20, 21, 22, 23, 24, 25]
   remapped_lumbar_classes: [0, 1, 2, 3, 4, 5, 6]
+  lumbar_class_names: ["background", "L1", "L2", "L3", "L4", "L5", "L6"]
 
   # Dataset split information
   train_pairs: 610
