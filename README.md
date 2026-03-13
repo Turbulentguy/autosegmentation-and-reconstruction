@@ -73,3 +73,45 @@ repository_name/
 ├── requirements.txt                    # Python dependencies
 └── README.md                           # Main project documentation
 ```
+
+## 5. Installation
+### Clone repository
+```
+git clone https://github.com/Turbulentguy/autosegmentation-and-reconstruction.git
+```
+### Move into project directory
+```
+cd repository_name
+```
+### Install dependencies
+```
+pip install -r requirements.txt
+```
+
+## 6. Training
+### How to perform model training
+```
+python scripts/main.py --config configs/configs.yaml --model <model_name>
+```
+
+## 7. Monitoring
+### How to enable TensorBoard
+```
+python -m tensorboard.main --logdir outputs
+```
+
+## 8. Dataset
+
+This repository uses the **CTSpine1K** dataset for training and evaluating the segmentation models. The dataset provides metadata that specifies which files should be used for model training, validation, and testing.
+
+Dataset split:
+
+- Training: 610 CT volumes
+- Validation: 197 CT volumes
+- Testing: 198 CT volumes
+
+## 9. Results
+
+## 10. Visualization
+
+Segmentation outputs can be imported into 3D Slicer for surface reconstruction and visualization.
