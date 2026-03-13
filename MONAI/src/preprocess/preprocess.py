@@ -7,7 +7,9 @@ from monai.transforms import (
     Orientationd, 
     Spacingd, 
     ScaleIntensityRangePercentilesd,
-    Lambdad
+    Lambdad,
+    SpatialPadd,
+    ResizeWithPadOrCropd
 )
 
 from src.utils.label_remap import label_remap
@@ -33,10 +35,12 @@ def train_transforms():
         CropForegroundd(keys = ["image", "mask"], 
                         source_key = "image", 
                         margin = 10),
+        SpatialPadd(keys = ["image", "mask"],
+                    spatial_size = (96, 96, 96)),
         RandCropByPosNegLabeld(keys = ["image", "mask"], 
                             label_key = "mask", 
                             spatial_size = (96, 96, 96), 
-                            pos = 3, 
+                            pos = 2, 
                             neg = 1,
                             num_samples = 4),
     ])
@@ -62,7 +66,9 @@ def val_transforms():
                 func = label_remap), 
         CropForegroundd(keys = ["image", "mask"], 
                         source_key = "image", 
-                        margin = 10)
+                        margin = 10),
+        ResizeWithPadOrCropd(keys = ["image", "mask"],
+                             spatial_size = (96, 96, 96))
     ])
     return val_transforms
 
@@ -85,5 +91,7 @@ def test_transforms():
         CropForegroundd(keys = ["image"], 
                         source_key = "image", 
                         margin = 10),
+        ResizeWithPadOrCropd(keys = ["image"],
+                             spatial_size = (96, 96, 96))
     ])
     return test_transforms

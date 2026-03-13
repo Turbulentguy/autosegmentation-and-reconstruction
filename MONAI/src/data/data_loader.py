@@ -1,5 +1,5 @@
 import yaml
-from monai.data import CacheDataset, DataLoader
+from monai.data import Dataset, DataLoader
 from src.preprocess.preprocess import (
     train_transforms,
     val_transforms,
@@ -13,10 +13,9 @@ batch_size = config["training"]["batch_size"]
 num_workers = config["training"]["num_workers"]
 
 def get_train_loader(train_pairs):
-    train_ds = CacheDataset(
+    train_ds = Dataset(
         data = train_pairs,
-        transform = train_transforms(),
-        cache_rate = 1.0
+        transform = train_transforms()
     )
 
     train_loader = DataLoader(
@@ -31,10 +30,9 @@ def get_train_loader(train_pairs):
     return train_loader
 
 def get_val_loader(val_pairs):
-    val_ds = CacheDataset(
+    val_ds = Dataset(
         data = val_pairs,
-        transform = val_transforms(),
-        cache_rate = 1.0
+        transform = val_transforms()
     )
 
     val_loader = DataLoader(
@@ -49,10 +47,9 @@ def get_val_loader(val_pairs):
     return val_loader
 
 def get_test_loader(test_pairs):
-    test_ds = CacheDataset(
+    test_ds = Dataset(
         data = test_pairs,
-        transform = test_transforms(),
-        cache_rate = 1.0,
+        transform = test_transforms()
     )
 
     test_loader = DataLoader(

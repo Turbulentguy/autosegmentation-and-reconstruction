@@ -3,8 +3,9 @@ import yaml
 import torch
 from tqdm import tqdm
 from time import time
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 from monai.transforms import AsDiscrete
+from monai.data import decollate_batch
 from monai.utils import set_determinism
 
 from src.data.data_loader import get_train_loader, get_val_loader
@@ -13,8 +14,8 @@ from src.models.models import build_model
 from src.metrics.metrics import get_dice, get_iou
 from src.training.validate import validate
 from src.loss.loss import get_loss
-from utils.folder_handler import folder_handler
-from utils.logging import (
+from src.utils.folder_handler import folder_handler
+from src.utils.logging import (
     create_tensorboard,
     create_csv,
     log_tensorboard,
@@ -52,11 +53,11 @@ def train(config_path, model_name = None, resume_path = None):
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr = config["training"]["learning_rate"],
-        weight_decay = config["training"]["weight_decay"]
+        lr = float(config["training"]["learning_rate"]),
+        weight_decay = float(config["training"]["weight_decay"])
     )
 
-    scaler = GradScaler()
+    scaler = GradScaler("cuda")
     max_epochs = config["training"]["num_epochs"]
     best_val_dice = 0.0
     start_epoch = 1
@@ -98,7 +99,7 @@ def train(config_path, model_name = None, resume_path = None):
 
             optimizer.zero_grad(set_to_none = True)
 
-            with autocast(enabled = torch.cuda.is_available()):
+            with autocast("cuda", enabled = torch.cuda.is_available()):
                 outputs = model(images)
                 loss = criterion(outputs, masks)
 
@@ -108,11 +109,14 @@ def train(config_path, model_name = None, resume_path = None):
 
             train_loss += loss.item()
 
-            preds = post_pred(outputs)
-            masks = post_mask(masks)
+            outputs_list = decollate_batch(outputs)
+            masks_list = decollate_batch(masks)
 
-            train_dice(preds, masks)
-            train_iou(preds, masks)
+            preds = [post_pred(out) for out in outputs_list]
+            targets = [post_mask(m) for m in masks_list]
+            
+            train_dice(preds, targets)
+            train_iou(preds, targets)
 
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
@@ -123,11 +127,14 @@ def train(config_path, model_name = None, resume_path = None):
         train_dice_score = train_dice.aggregate()
         train_iou_score = train_iou.aggregate()
 
-        mean_dice = train_dice_score.mean().item()
-        mean_iou = train_iou_score.mean().item()
+        mean_dice = torch.nanmean(train_dice_score).item()
+        mean_iou = torch.nanmean(train_iou_score).item()
+
+        train_dice_per_class = torch.nanmean(train_dice_score, dim = 0)
+        train_iou_per_class = torch.nanmean(train_iou_score, dim = 0)
 
         print("Training Per-class metrics:")
-        for name, dice_score, iou_score in zip(class_names, train_dice_score, train_iou_score):
+        for name, dice_score, iou_score in zip(class_names[1:], train_dice_per_class, train_iou_per_class):
             print(f"Class = {name}: Dice = {dice_score.item():.4f}, IoU = {iou_score.item():.4f}")
 
         train_dice.reset()
@@ -140,10 +147,13 @@ def train(config_path, model_name = None, resume_path = None):
                                             val_iou_metric,
                                             device
         )
+        
+        val_dice_per_class = torch.nanmean(val_dice_class, dim = 0)
+        val_iou_per_class = torch.nanmean(val_iou_class, dim = 0)
 
         print("Validation Per-class metrics:")
-        for name, dice_score, iou_score in zip(class_names, val_dice_class, val_iou_class):
-            print(f"Class = {name}: Dice = {dice_score.item():.4f}, IoU = {iou_score.item():.4f}")
+        for name, dice_score, iou_score in zip(class_names[1:], val_dice_per_class, val_iou_per_class):
+            print(f"Class = {name}: Validation Dice = {dice_score.item():.4f}, ValidationIoU = {iou_score.item():.4f}")
 
         tag = ""
         if val_mean_dice > best_val_dice:

@@ -11,7 +11,7 @@ def get_seed():
     return seed
 
 
-def get_batch_size():
+def get_batch_size(): 
     return config["training"]["batch_size"]
 
 

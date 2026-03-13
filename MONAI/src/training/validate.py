@@ -1,8 +1,9 @@
 from time import time
 import torch
 from tqdm import tqdm
-from torch.cuda.amp import autocast
+from torch.amp import autocast
 from monai.transforms import AsDiscrete
+from monai.data import decollate_batch
 import yaml
 
 with open("configs/configs.yaml", "r") as f:
@@ -29,29 +30,32 @@ def validate(model, loader, criterion, dice, iou, device):
             images = batch["image"].to(device, non_blocking=True)
             masks = batch["mask"].to(device, non_blocking=True)
 
-            with autocast(enabled = torch.cuda.is_available()):
+            with autocast("cuda", enabled = torch.cuda.is_available()):
                 outputs = model(images)
                 loss = criterion(outputs, masks)
 
             val_loss += loss.item()
 
-            preds = post_pred(outputs)
-            masks_onehot = post_mask(masks)
+            outputs_list = decollate_batch(outputs)
+            masks_list = decollate_batch(masks)
 
-            dice(preds, masks_onehot)
-            iou(preds, masks_onehot)
+            preds = [post_pred(out) for out in outputs_list]
+            targets = [post_mask(m) for m in masks_list]
+
+            dice(preds, targets)
+            iou(preds, targets)
 
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
             batch_time.append(time() - t0)
 
     val_loss /= len(loader)
-    val_dice_class = dice.aggregate()
-    val_iou_class = iou.aggregate()
+    val_dice_score = dice.aggregate()
+    val_iou_score = iou.aggregate()
 
-    val_mean_dice = val_dice_class.mean().item()
-    val_mean_iou = val_iou_class.mean().item()
+    val_mean_dice = torch.nanmean(val_dice_score).item()
+    val_mean_iou = torch.nanmean(val_iou_score).item()
     dice.reset()
     iou.reset()
 
-    return val_loss, val_dice_class, val_iou_class, val_mean_dice, val_mean_iou, batch_time
+    return val_loss, val_dice_score, val_iou_score, val_mean_dice, val_mean_iou, batch_time
