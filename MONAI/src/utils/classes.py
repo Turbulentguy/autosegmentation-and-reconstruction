@@ -3,9 +3,7 @@ from glob import glob
 from tqdm import tqdm
 import numpy as np
 import yaml
-
-with open("configs/configs.yaml", "r") as f:
-    config = yaml.safe_load(f)
+from src.utils.configs import config
 
 files = glob(config["data"]["train_masks_dir"] + "/*_0000_seg.nii.gz")
 vals = set()

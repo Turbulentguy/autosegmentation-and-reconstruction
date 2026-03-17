@@ -1,9 +1,6 @@
 import os
 from tqdm import tqdm
-import yaml
-
-with open("configs/configs.yaml", "r") as f:
-    config = yaml.safe_load(f)
+from src.utils.configs import config
 
 images_dir = config["data"]["images_dir"]
 masks_dir = config["data"]["masks_dir"]

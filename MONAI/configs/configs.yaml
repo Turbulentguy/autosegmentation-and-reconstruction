@@ -62,3 +62,7 @@ training:
   num_epochs: 100
   learning_rate: 1e-4
   weight_decay: 1e-5
+
+outputs:
+  outputs_path: /lustrefs/disk/home/sngamvil/MONAI/outputs/
+  resume_training_path: /lustrefs/disk/home/sngamvil/MONAI/outputs/unet/run_001/checkpoints/unet_last.pt 

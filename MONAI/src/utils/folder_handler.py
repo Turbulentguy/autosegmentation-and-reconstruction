@@ -1,7 +1,8 @@
 import os
+from src.utils.configs import config
 
 def folder_handler(model_name):
-    base_dir = os.path.join("outputs", model_name)
+    base_dir = os.path.join(config["outputs"]["outputs_path"], model_name)
     os.makedirs(base_dir, exist_ok=True)
 
     runs = [d for d in os.listdir(base_dir) if d.startswith("run_")]

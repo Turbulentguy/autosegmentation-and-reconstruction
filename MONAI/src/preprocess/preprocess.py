@@ -42,7 +42,7 @@ def train_transforms():
                             spatial_size = (96, 96, 96), 
                             pos = 2, 
                             neg = 1,
-                            num_samples = 4),
+                            num_samples = 1),
     ])
     return train_transforms
 

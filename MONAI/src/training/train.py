@@ -1,5 +1,4 @@
 import os
-import yaml
 import torch
 from tqdm import tqdm
 from time import time
@@ -8,6 +7,7 @@ from monai.transforms import AsDiscrete
 from monai.data import decollate_batch
 from monai.utils import set_determinism
 
+from src.utils.configs import set_runtime_config
 from src.data.data_loader import get_train_loader, get_val_loader
 from src.data.data_pairs import data_pairs
 from src.models.models import build_model
@@ -23,8 +23,7 @@ from src.utils.logging import (
 )
 
 def train(config_path, model_name = None, resume_path = None):
-    with open(config_path, "r") as f:
-        config = yaml.safe_load(f)
+    config = set_runtime_config(config_path = config_path)
 
     seed = config["training"]["random_seed"]
     set_determinism(seed = seed)
@@ -35,12 +34,15 @@ def train(config_path, model_name = None, resume_path = None):
     num_classes = config["data"]["num_classes_lumbar"]
     class_names = config["data"]["lumbar_class_names"]
 
-    run_dir = folder_handler(model_name)
+    if resume_path is not None:
+        run_dir = os.path.dirname(os.path.dirname(resume_path))
+    else:
+        run_dir = folder_handler(model_name)
 
     writer = create_tensorboard(run_dir)
     csv_path = create_csv(run_dir)
 
-    train_pairs, val_pairs, _ = data_pairs(config)
+    train_pairs, val_pairs, _ = data_pairs()
     train_loader = get_train_loader(train_pairs)
     val_loader = get_val_loader(val_pairs)
 
@@ -153,7 +155,7 @@ def train(config_path, model_name = None, resume_path = None):
 
         print("Validation Per-class metrics:")
         for name, dice_score, iou_score in zip(class_names[1:], val_dice_per_class, val_iou_per_class):
-            print(f"Class = {name}: Validation Dice = {dice_score.item():.4f}, ValidationIoU = {iou_score.item():.4f}")
+            print(f"Class = {name}: Validation Dice = {dice_score.item():.4f}, Validation IoU = {iou_score.item():.4f}")
 
         tag = ""
         if val_mean_dice > best_val_dice:

@@ -1,8 +1,5 @@
-import yaml
 from monai.networks.nets import SwinUNETR
-
-with open("configs/configs.yaml", "r") as f:
-    config = yaml.safe_load(f)
+from src.utils.configs import config
 
 def get_swinunetr():
     params = {

@@ -13,18 +13,19 @@ def create_csv(run_dir):
 
     csv_path = os.path.join(csv_dir, "metrics.csv")
 
-    with open(csv_path, "w", newline = "") as f:
-        writer = csv.writer(f)
-        writer.writerow(["Epoch", 
-                         "Training Loss", 
-                         "Training Dice",
-                         "Training IoU",
-                         "Training Time",
-                         "Validation Loss", 
-                         "Validation Dice", 
-                         "Validation IoU",
-                         "Validation Time",
-                         "Learning Rate"])
+    if not os.path.exists(csv_path):
+        with open(csv_path, "w", newline = "") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Epoch", 
+                            "Training Loss", 
+                            "Training Dice",
+                            "Training IoU",
+                            "Training Time",
+                            "Validation Loss", 
+                            "Validation Dice", 
+                            "Validation IoU",
+                            "Validation Time",
+                            "Learning Rate"])
     
     return csv_path
 

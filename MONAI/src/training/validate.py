@@ -4,10 +4,7 @@ from tqdm import tqdm
 from torch.amp import autocast
 from monai.transforms import AsDiscrete
 from monai.data import decollate_batch
-import yaml
-
-with open("configs/configs.yaml", "r") as f:
-    config = yaml.safe_load(f)
+from src.utils.configs import config
 
 num_classes = config["data"]["num_classes_lumbar"]
 post_pred = AsDiscrete(argmax=True, to_onehot=num_classes)

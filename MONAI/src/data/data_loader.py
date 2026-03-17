@@ -1,18 +1,14 @@
-import yaml
 from monai.data import Dataset, DataLoader
 from src.preprocess.preprocess import (
     train_transforms,
     val_transforms,
     test_transforms
 )
-
-with open("configs/configs.yaml", "r") as f:
-    config = yaml.safe_load(f)
-
-batch_size = config["training"]["batch_size"]
-num_workers = config["training"]["num_workers"]
+from src.utils.configs import config
 
 def get_train_loader(train_pairs):
+    batch_size = config["training"]["batch_size"]
+    num_workers = config["training"]["num_workers"]
     train_ds = Dataset(
         data = train_pairs,
         transform = train_transforms()
@@ -30,6 +26,8 @@ def get_train_loader(train_pairs):
     return train_loader
 
 def get_val_loader(val_pairs):
+    batch_size = config["training"]["batch_size"]
+    num_workers = config["training"]["num_workers"]
     val_ds = Dataset(
         data = val_pairs,
         transform = val_transforms()
@@ -47,6 +45,9 @@ def get_val_loader(val_pairs):
     return val_loader
 
 def get_test_loader(test_pairs):
+    batch_size = config["training"]["batch_size"]
+    num_workers = config["training"]["num_workers"]
+
     test_ds = Dataset(
         data = test_pairs,
         transform = test_transforms()

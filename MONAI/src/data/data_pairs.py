@@ -1,9 +1,6 @@
 from glob import glob
 import os
-import yaml
-
-with open("configs/configs.yaml", "r") as f:
-        config = yaml.safe_load(f)
+from src.utils.configs import config
 
 train_images_dir = config["data"]["train_images_dir"]
 train_masks_dir = config["data"]["train_masks_dir"]
@@ -11,7 +8,7 @@ val_images_dir = config["data"]["val_images_dir"]
 val_masks_dir = config["data"]["val_masks_dir"]
 test_images_dir = config["data"]["test_images_dir"]
 
-def data_pairs(config_path = None):
+def data_pairs():
     
     train_images = sorted(glob(os.path.join(train_images_dir, "*_0000.nii.gz")))
     train_masks = sorted(glob(os.path.join(train_masks_dir, "*_0000_seg.nii.gz")))

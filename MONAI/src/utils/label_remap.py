@@ -1,9 +1,6 @@
-import yaml
 import numpy as np
 import torch
-
-with open("configs/configs.yaml", "r") as f:
-    config = yaml.safe_load(f)
+from src.utils.configs import config
 
 lumbar_classes = config["data"]["lumbar_classes"]
 remapped_lumbar_classes = config["data"]["remapped_lumbar_classes"]
