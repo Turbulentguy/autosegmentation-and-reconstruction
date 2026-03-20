@@ -65,4 +65,5 @@ training:
 
 outputs:
   outputs_path: /lustrefs/disk/home/sngamvil/MONAI/outputs/
+  best_model_path: "/lustrefs/disk/home/sngamvil/MONAI/outputs/unet/run_001/checkpoints/unet_best_model.pt"
   resume_training_path: /lustrefs/disk/home/sngamvil/MONAI/outputs/unet/run_001/checkpoints/unet_last.pt 

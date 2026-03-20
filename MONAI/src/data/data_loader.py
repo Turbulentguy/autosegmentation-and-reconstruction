@@ -6,7 +6,7 @@ from src.preprocess.preprocess import (
 )
 from src.utils.configs import config
 
-def get_train_loader(train_pairs):
+def get_train_loader(train_pairs, config):
     batch_size = config["training"]["batch_size"]
     num_workers = config["training"]["num_workers"]
     train_ds = Dataset(
@@ -25,7 +25,7 @@ def get_train_loader(train_pairs):
 
     return train_loader
 
-def get_val_loader(val_pairs):
+def get_val_loader(val_pairs, config):
     batch_size = config["training"]["batch_size"]
     num_workers = config["training"]["num_workers"]
     val_ds = Dataset(
@@ -44,9 +44,9 @@ def get_val_loader(val_pairs):
 
     return val_loader
 
-def get_test_loader(test_pairs):
-    batch_size = config["training"]["batch_size"]
-    num_workers = config["training"]["num_workers"]
+def get_test_loader(test_pairs, config):
+    batch_size = 1
+    num_workers = 0
 
     test_ds = Dataset(
         data = test_pairs,
@@ -59,7 +59,7 @@ def get_test_loader(test_pairs):
         shuffle = False,
         num_workers = num_workers,
         pin_memory = True,
-        persistent_workers = num_workers > 0
+        persistent_workers = False
     )
 
     return test_loader

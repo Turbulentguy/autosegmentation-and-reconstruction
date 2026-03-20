@@ -13,7 +13,8 @@ def apply_data_path_overrides(config_data,
                               images_dir = None, 
                               masks_dir = None,
                               resume_training_path = None,
-                              outputs_path = None
+                              outputs_path = None,
+                              best_model_path = None
 ):
     data = config_data.setdefault("data", {})
 
@@ -27,6 +28,8 @@ def apply_data_path_overrides(config_data,
         config_data["outputs"]["resume_training_path"] = resume_training_path
     if outputs_path is not None:
         config_data["outputs"]["outputs_path"] = outputs_path
+    if best_model_path is not None:
+        config_data["outputs"]["best_model_path"] = best_model_path
 
     return config_data
 
@@ -62,6 +65,7 @@ def build_effective_config(
     masks_dir = None,
     resume_training_path = None,
     outputs_path = None,
+    best_model_path = None,
     random_seed = None,
     batch_size = None,
     num_workers = None,
@@ -78,7 +82,8 @@ def build_effective_config(
         images_dir = images_dir,
         masks_dir = masks_dir,
         resume_training_path = resume_training_path,
-        outputs_path = outputs_path
+        outputs_path = outputs_path,
+        best_model_path = best_model_path
     )
 
     config_data = apply_training_overrides(
@@ -104,6 +109,7 @@ def set_runtime_config(
     masks_dir = None,
     resume_training_path = None,
     outputs_path = None,
+    best_model_path = None,
     random_seed = None,
     batch_size = None,
     num_workers = None,
@@ -112,13 +118,14 @@ def set_runtime_config(
     weight_decay = None
 ):
     global config
-    config = build_effective_config(
+    new_config = build_effective_config(
         config_path = config_path,
         meta_path = meta_path,
         images_dir = images_dir,
         masks_dir = masks_dir,
         resume_training_path = resume_training_path,
         outputs_path = outputs_path,
+        best_model_path = best_model_path,
         random_seed = random_seed,
         batch_size = batch_size,
         num_workers = num_workers,
@@ -126,4 +133,9 @@ def set_runtime_config(
         learning_rate = learning_rate,
         weight_decay = weight_decay
     )
+
+    # Keep the same dict object so modules importing `config` see updated values.
+    config.clear()
+    config.update(new_config)
+
     return config

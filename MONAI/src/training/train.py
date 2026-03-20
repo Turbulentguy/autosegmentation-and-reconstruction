@@ -42,9 +42,9 @@ def train(config_path, model_name = None, resume_path = None):
     writer = create_tensorboard(run_dir)
     csv_path = create_csv(run_dir)
 
-    train_pairs, val_pairs, _ = data_pairs()
-    train_loader = get_train_loader(train_pairs)
-    val_loader = get_val_loader(val_pairs)
+    train_pairs, val_pairs, _ = data_pairs(config)
+    train_loader = get_train_loader(train_pairs, config)
+    val_loader = get_val_loader(val_pairs, config)
 
     model = build_model(model_name).to(device)
     criterion = get_loss()
@@ -59,8 +59,9 @@ def train(config_path, model_name = None, resume_path = None):
         weight_decay = float(config["training"]["weight_decay"])
     )
 
-    scaler = GradScaler("cuda")
+    scaler = GradScaler(enabled = torch.cuda.is_available())
     max_epochs = config["training"]["num_epochs"]
+    best_model_path = None
     best_val_dice = 0.0
     start_epoch = 1
 
@@ -147,7 +148,8 @@ def train(config_path, model_name = None, resume_path = None):
                                             criterion,
                                             val_dice_metric,
                                             val_iou_metric,
-                                            device
+                                            device,
+                                            config
         )
         
         val_dice_per_class = torch.nanmean(val_dice_class, dim = 0)
@@ -160,13 +162,14 @@ def train(config_path, model_name = None, resume_path = None):
         tag = ""
         if val_mean_dice > best_val_dice:
             best_val_dice = val_mean_dice
+            best_model_path = os.path.join(run_dir, "checkpoints", f"{model_name}_best_model.pt")
             torch.save({
                 "epoch": epoch,
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "scaler_state_dict": scaler.state_dict(),
                 "best_val_dice": best_val_dice,
-            }, os.path.join(run_dir, "checkpoints", f"{model_name}_best_model.pt"))
+            }, best_model_path)
             tag = "<--- (best)"
 
         torch.save({
@@ -204,5 +207,6 @@ def train(config_path, model_name = None, resume_path = None):
         )
 
     writer.close()
+    return best_model_path or os.path.join(run_dir, "checkpoints", f"{model_name}_last.pt")
 
 

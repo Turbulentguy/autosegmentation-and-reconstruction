@@ -15,5 +15,5 @@ def folder_handler(model_name):
     os.makedirs(os.path.join(run_dir, "logs"), exist_ok = True)
     os.makedirs(os.path.join(run_dir, "tensorboard"), exist_ok = True)
     os.makedirs(os.path.join(run_dir, "csv"), exist_ok = True)
-
+    
     return run_dir

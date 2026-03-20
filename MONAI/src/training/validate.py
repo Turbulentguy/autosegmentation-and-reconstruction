@@ -4,14 +4,13 @@ from tqdm import tqdm
 from torch.amp import autocast
 from monai.transforms import AsDiscrete
 from monai.data import decollate_batch
-from src.utils.configs import config
 
-num_classes = config["data"]["num_classes_lumbar"]
-post_pred = AsDiscrete(argmax=True, to_onehot=num_classes)
-post_mask = AsDiscrete(to_onehot=num_classes)
-
-def validate(model, loader, criterion, dice, iou, device):
+def validate(model, loader, criterion, dice, iou, device, config):
     model.eval()
+
+    num_classes = config["data"]["num_classes_lumbar"]
+    post_pred = AsDiscrete(argmax = True, to_onehot = num_classes)
+    post_mask = AsDiscrete(to_onehot = num_classes)
 
     dice.reset()
     iou.reset()

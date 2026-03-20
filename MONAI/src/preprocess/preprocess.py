@@ -88,10 +88,5 @@ def test_transforms():
         Spacingd(keys = ["image"],
                 pixdim = (1.0, 1.0, 1.0),
                 mode = ("trilinear",)),
-        CropForegroundd(keys = ["image"], 
-                        source_key = "image", 
-                        margin = 10),
-        ResizeWithPadOrCropd(keys = ["image"],
-                             spatial_size = (96, 96, 96))
     ])
     return test_transforms

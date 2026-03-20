@@ -2,11 +2,11 @@ import os
 from tqdm import tqdm
 from src.utils.configs import config
 
-images_dir = config["data"]["images_dir"]
-masks_dir = config["data"]["masks_dir"]
-meta_path = config["data"]["meta_path"]
-
 def data_split():
+
+    images_dir = config["data"]["images_dir"]
+    masks_dir = config["data"]["masks_dir"]
+    meta_path = config["data"]["meta_path"]
 
     train_images_dir = config["data"]["train_images_dir"]
     train_masks_dir = config["data"]["train_masks_dir"]
