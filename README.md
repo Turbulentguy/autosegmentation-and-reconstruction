@@ -126,3 +126,45 @@ Dataset split:
 ## 10. Visualization
 
 Segmentation outputs can be imported into 3D Slicer for surface reconstruction and visualization.
+
+## 11. Testing / Inference from CLI
+
+### Run test only (using an existing trained checkpoint)
+```
+python scripts/main.py --config configs/configs.yaml --model <model_name> --mode test --best_model_path <path_to_best_model.pt>
+```
+
+Example:
+```
+python scripts/main.py --config configs/configs.yaml --model unet --mode test --best_model_path outputs/unet/run_001/checkpoints/unet_best_model.pt
+```
+
+### Run training and testing in one command
+```
+python scripts/main.py --config configs/configs.yaml --model <model_name> --mode both
+```
+
+### Supported model names
+- `unet`
+- `unetr`
+- `swinunetr`
+
+### Important notes
+- When using `--mode test`, you must provide `--best_model_path`.
+- Testing uses sliding-window inference and post-processing before saving masks.
+- Output predictions are saved under the run directory in:
+      - `<run_dir>/predictions/`
+
+### Optional path overrides from CLI
+You can override dataset and output paths without editing the YAML file:
+```
+python scripts/main.py \
+      --config configs/configs.yaml \
+      --model unet \
+      --mode test \
+      --best_model_path <path_to_best_model.pt> \
+      --meta_path <path_to_data_split.txt> \
+      --images_dir <path_to_images> \
+      --masks_dir <path_to_masks> \
+      --outputs_path <path_to_outputs>
+```
