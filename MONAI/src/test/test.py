@@ -38,7 +38,7 @@ def test(config_path, model_name = None, best_model_path = None):
     post_label = AsDiscrete(argmax = True)
     roi_size = tuple(config["models"]["global"].get("img_size", [96, 96, 96]))
     sw_batch_size = 1
-    overlap = 0.25
+    overlap = 0.5
 
     saver = get_saver(config_path, model_path)
     post_process = build_post_process(config)
@@ -53,6 +53,7 @@ def test(config_path, model_name = None, best_model_path = None):
                 sw_batch_size = sw_batch_size,
                 predictor = model,
                 overlap = overlap,
+                mode = "gaussian",
             )
 
             outputs_list = decollate_batch(outputs)

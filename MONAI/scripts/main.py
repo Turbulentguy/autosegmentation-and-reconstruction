@@ -46,8 +46,11 @@ def main():
                         default = None,
                         help = "Path to best model checkpoint for testing")
     
-    parser.add_argument("--only_test", 
-                        action="store_true")
+    parser.add_argument("--mode",
+                        type = str.lower,
+                        choices = ["train", "test", "both"],
+                        default = "train",
+                        help = "Mode to run: train, test, or both")
     
     parser.add_argument("--random_seed",
                         type = int,
@@ -78,8 +81,6 @@ def main():
                         type = float,
                         default = None,
                         help = "Weight decay")
-    
-
 
     args = parser.parse_args()
 
@@ -103,17 +104,29 @@ def main():
         save_config(effective_config, temp_config.name)
         effective_config_path = temp_config.name
 
-    if not args.only_test:
-        trained_model_path = train(effective_config_path, args.model, args.resume_training_path)
-    else:
-        trained_model_path = None
+    trained_model_path = None
 
-    if args.only_test and args.best_model_path is None:
-        raise ValueError("You must provide --best_model_path when using --only_test")
+    if args.mode in ["train", "both"]:
+        trained_model_path = train(
+            effective_config_path,
+            args.model,
+            args.resume_training_path
+        )
 
-    best_test_model_path = args.best_model_path or trained_model_path
+    if args.mode in ["test", "both"]:
+        if args.mode == "test" and args.best_model_path is None:
+            raise ValueError("You must provide --best_model_path when using --mode test")
 
-    test(effective_config_path, args.model, best_test_model_path)
+        best_test_model_path = args.best_model_path or trained_model_path
+
+        if best_test_model_path is None:
+            raise ValueError("No model available for testing")
+
+        test(
+            effective_config_path,
+            args.model,
+            best_test_model_path
+        )
 
 if __name__ == "__main__":
     main()

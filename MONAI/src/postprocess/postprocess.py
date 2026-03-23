@@ -14,7 +14,7 @@ def build_post_process(config):
         ),
         RemoveSmallObjectsd(
             keys = "pred",
-            min_size = 1000,
+            min_size = 5000,
             independent_channels = True
         ),
         FillHolesd(
