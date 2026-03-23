@@ -57,16 +57,21 @@ repository_name/
 |   ├── metrics/                        # Metrics Directory
 │   │   └── metrics.py                  # Script for Dice & IoU
 |   ├── models/                         # Models Directory
-│   │   ├── models.py                   # Script for model preferance
+│   │   ├── models.py                   # Script for Model Preferance
 │   │   ├── swinunetr.py                # Script for SwinUNetR model
 │   │   ├── unet.py                     # Script for UNet model
 │   │   └── unetr.py                    # Script for UNetR model
+|   ├── postprocess/                    # Data Postprocessing Directory
+│   │   └── postprocess.py              # Script for Data Postprocessing
 |   ├── preprocess/                     # Data Preprocessing Directory
-│   │   └── preprocess.py               # Script for data preprocessing
+│   │   └── preprocess.py               # Script for Data Preprocessing
+|   ├── test/
+│   │   ├── saver.py                    # Script to save files to a preferred Directory
+│   │   └── test.py                     # Script for Model Testing
 |   ├── training/                       # Training Directory
-│   │   ├── train.py                    # Script for model training
-│   │   └── validation.py               # Script for model validation
-|   └── utils/                          # utilities Directory
+│   │   ├── train.py                    # Script for Model Training
+│   │   └── validation.py               # Script for Model Validation
+|   └── utils/                          # Utilities Directory
 │       ├── configs.py                  # Script for configuration
 │       ├── folder_handler.py           # Script for handling directories
 │       └── logging.py                  # Script for logging
@@ -111,6 +116,12 @@ Dataset split:
 - Testing: 198 CT volumes
 
 ## 9. Results
+
+| Model | Loss  | DICE  | IoU   | Validation Batch Time |
+|-------|-------|-------|-------|------------------------|
+| UNet | 0.7175 | 0.7750 | 0.7069 | 0.027 seconds |
+| UNetR | 0.7493 | 0.7481 | 0.6735 | 0.102 seconds |
+| SwinUNetR | 0.7292 | 0.7571 | 0.6923 | 0.152 seconds |
 
 ## 10. Visualization
 
