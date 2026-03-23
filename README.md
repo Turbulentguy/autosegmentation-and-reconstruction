@@ -168,3 +168,16 @@ python scripts/main.py \
       --masks_dir <path_to_masks> \
       --outputs_path <path_to_outputs>
 ```
+
+## 12. Training Resources
+
+All three models (UNet, UNETR, and SwinUNETR) were trained on the **LANTA supercomputer**.
+
+Resource setting used for training jobs:
+
+- 1 GPU (`--gres=gpu:1`)
+- 8 CPU cores (`--cpus-per-task=8`)
+- 64 GB RAM (`--mem=64G`)
+- Up to 24 hours per submitted job (`-t 24:00:00`)
+
+Using this setup, the training time for the three models was approximately **100 hours** in for each models.
