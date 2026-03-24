@@ -147,40 +147,50 @@ python -m tensorboard.main --logdir outputs
 ## 9. Repository Structures
 ```
 repository_name/
-├── configs/                            # Configuration Directory
-│   └── configs.yaml                    # Model & Path Configurations
-├── scripts/                            # Scripts Directory
-│   └── main.py                         # Script to run the repository
-├── src/                                # Sources Directory
-│   ├── data/                           # Data Directory
-│   │   ├── data_loader.py              # Script to load data
-│   │   ├── data_pairs.py               # Script to pair data
-│   │   └── data_splitter.py            # Script to split data (Training set, Validation set, Testing set)
-|   ├── loss/                           # Loss Directory
-│   │   └── loss.py                     # Script for DiceCeLoss
-|   ├── metrics/                        # Metrics Directory
-│   │   └── metrics.py                  # Script for Dice & IoU
-|   ├── models/                         # Models Directory
-│   │   ├── models.py                   # Script for Model Preference
-│   │   ├── swinunetr.py                # Script for SwinUNetR model
-│   │   ├── unet.py                     # Script for UNet model
-│   │   └── unetr.py                    # Script for UNetR model
-|   ├── postprocess/                    # Data Postprocessing Directory
-│   │   └── postprocess.py              # Script for Data Postprocessing
-|   ├── preprocess/                     # Data Preprocessing Directory
-│   │   └── preprocess.py               # Script for Data Preprocessing
-|   ├── test/                           # Testing Directory
-│   │   ├── saver.py                    # Script to save files to a preferred Directory
-│   │   └── test.py                     # Script for Model Testing
-|   ├── training/                       # Training Directory
-│   │   ├── train.py                    # Script for Model Training
-│   │   └── validation.py               # Script for Model Validation
-|   └── utils/                          # Utilities Directory
-│       ├── configs.py                  # Script for configuration
-│       ├── folder_handler.py           # Script for handling directories
-│       └── logging.py                  # Script for logging
-├── requirements.txt                    # Python dependencies
-└── README.md                           # Main project documentation
+├── configs/                                        # Configuration Directory
+│   └── configs.yaml                                # Model & Path Configurations
+├── outputs/                                        # Outputs Directory
+│   └── model_name/                                 # Output from the ran model Directory
+│       └── run_id/                                 # Run ID Directory
+│           ├── checkpoints/                        # Model checkpoints Directory
+│           |   ├── modelName_best_model.pt         # Trained Best Model
+│           |   └── modelName_last.pt               # Last Trained Model
+│           ├── csv/                                # CSV Result Directory
+│           |   └── metrics.csv                     # Model CSV results
+│           └── tensorboard                         # TensorBoard Directory
+│               └── events_logs                     # Event logs
+├── scripts/                                        # Scripts Directory
+│   └── main.py                                     # Script to run the repository
+├── src/                                            # Sources Directory
+│   ├── data/                                       # Data Directory
+│   │   ├── data_loader.py                          # Script to load data
+│   │   ├── data_pairs.py                           # Script to pair data
+│   │   └── data_splitter.py                        # Script to split data (Training set, Validation set, Testing set)
+|   ├── loss/                                       # Loss Directory
+│   │   └── loss.py                                 # Script for DiceCeLoss
+|   ├── metrics/                                    # Metrics Directory
+│   │   └── metrics.py                              # Script for Dice & IoU
+|   ├── models/                                     # Models Directory
+│   │   ├── models.py                               # Script for Model Preference
+│   │   ├── swinunetr.py                            # Script for SwinUNetR model
+│   │   ├── unet.py                                 # Script for UNet model
+│   │   └── unetr.py                                # Script for UNetR model
+|   ├── postprocess/                                # Data Postprocessing Directory
+│   │   └── postprocess.py                          # Script for Data Postprocessing
+|   ├── preprocess/                                 # Data Preprocessing Directory
+│   │   └── preprocess.py                           # Script for Data Preprocessing
+|   ├── test/                                       # Testing Directory
+│   │   ├── saver.py                                # Script to save files to a preferred Directory
+│   │   └── test.py                                 # Script for Model Testing
+|   ├── training/                                   # Training Directory
+│   │   ├── train.py                                # Script for Model Training
+│   │   └── validation.py                           # Script for Model Validation
+|   └── utils/                                      # Utilities Directory
+│       ├── configs.py                              # Script for configuration
+│       ├── folder_handler.py                       # Script for handling directories
+│       └── logging.py                              # Script for logging
+├── requirements.txt                                # Python dependencies
+└── README.md                                       # Main project documentation
 ```
 
 ## 10. Visualization
