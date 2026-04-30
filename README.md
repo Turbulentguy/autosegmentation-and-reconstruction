@@ -67,7 +67,7 @@ git clone https://github.com/Turbulentguy/autosegmentation-and-reconstruction.gi
 ```
 ### Move into project directory
 ```
-cd repository_name
+cd Clackle
 ```
 ### Install dependencies
 ```
