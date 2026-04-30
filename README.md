@@ -146,7 +146,7 @@ python -m tensorboard.main --logdir outputs
 
 ## 9. Repository Structures
 ```
-repository_name/
+Clackle/
 ├── configs/                                        # Configuration Directory
 │   └── configs.yaml                                # Model & Path Configurations
 ├── outputs/                                        # Outputs Directory
