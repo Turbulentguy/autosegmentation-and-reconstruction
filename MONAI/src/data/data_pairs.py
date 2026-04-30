@@ -1,15 +1,39 @@
 from glob import glob
 import os
 
+def get_case_id_from_image_path(image_path):
+    name = os.path.basename(image_path)
+    if name.endswith("_0000.nii.gz"):
+        return name[:-len("_0000.nii.gz")]
+    if name.endswith(".nii.gz"):
+        return name[:-len(".nii.gz")]
+    return name
+
+def get_case_id_from_mask_path(mask_path):
+    name = os.path.basename(mask_path)
+    if name.endswith("_0000_seg.nii.gz"):
+        return name[:-len("_0000_seg.nii.gz")]
+    if name.endswith("_seg.nii.gz"):
+        return name[:-len("_seg.nii.gz")]
+    return name
+
+def glob_images(images_dir):
+    candidates = glob(os.path.join(images_dir, "*_0000.nii.gz")) + glob(os.path.join(images_dir, "*.nii.gz"))
+    return sorted(set(candidates))
+
+def glob_masks(masks_dir):
+    candidates = glob(os.path.join(masks_dir, "*_0000_seg.nii.gz")) + glob(os.path.join(masks_dir, "*_seg.nii.gz"))
+    return sorted(set(candidates))
+
 def match_pairs(images, masks):
     mask_dict = {
-        os.path.basename(m).replace("_0000_seg.nii.gz", ""): m
+        get_case_id_from_mask_path(m): m
         for m in masks
     }
 
     pairs = []
     for img in images:
-        key = os.path.basename(img).replace("_0000.nii.gz", "")
+        key = get_case_id_from_image_path(img)
 
         if key in mask_dict:
             pairs.append({
@@ -29,11 +53,11 @@ def data_pairs(config):
     val_masks_dir = config["data"]["val_masks_dir"]
     test_images_dir = config["data"]["test_images_dir"]
     
-    train_images = sorted(glob(os.path.join(train_images_dir, "*_0000.nii.gz")))
-    train_masks = sorted(glob(os.path.join(train_masks_dir, "*_0000_seg.nii.gz")))
-    val_images = sorted(glob(os.path.join(val_images_dir, "*_0000.nii.gz")))
-    val_masks = sorted(glob(os.path.join(val_masks_dir, "*_0000_seg.nii.gz")))
-    test_images = sorted(glob(os.path.join(test_images_dir, "*_0000.nii.gz")))
+    train_images = glob_images(train_images_dir)
+    train_masks = glob_masks(train_masks_dir)
+    val_images = glob_images(val_images_dir)
+    val_masks = glob_masks(val_masks_dir)
+    test_images = glob_images(test_images_dir)
 
     train_pairs = match_pairs(train_images, train_masks)
     val_pairs = match_pairs(val_images, val_masks)

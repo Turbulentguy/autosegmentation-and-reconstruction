@@ -100,6 +100,9 @@ def main():
         weight_decay = args.weight_decay,
     )
 
+    if args.mode in ["test", "both"] and args.images_dir is not None:
+        effective_config["data"]["test_images_dir"] = args.images_dir
+
     with tempfile.NamedTemporaryFile(mode = "w", suffix = ".yaml", delete = False) as temp_config:
         save_config(effective_config, temp_config.name)
         effective_config_path = temp_config.name
